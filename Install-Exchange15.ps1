@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 2.98, April 1st, 2018
+    Version 2.99, April 2nd, 2018
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius,
     Bobby West and everyone else who provided feedback.
@@ -184,6 +184,7 @@
             Added blocking of .NET Framework 4.7.2 (Preview)
             Added upgrade mode detection
             Added TargetPath usage for Recover mode
+    2.99    Added Windows Defender exclusions (Ex2016 on WS2016)
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -1814,16 +1815,12 @@ process {
     }
 
 
-    Function Configure-WindowsDefenderExcludeNodeRunner {
-        Write-MyOutput 'Configuring Windows Defender exclusions: NodeRunner process'
-        Get-Process -Name NodeRunner | Select -First 1 | % {
-            Write-MyVerbose "WindowsDefender: Excluding path path $($_.Path)"
-            Add-MpPreference -ExclusionPath $_.Path -ErrorAction SilentlyContinue
-        }
-    }
+    Function Configure-WindowsDefenderExclusions {
 
-    Function Configure-WindowsDefenderExcludeSetupInstallLogFolders {
-        Write-MyOutput 'Configuring Windows Defender exclusions: Setup, Install and log folders'
+        $SystemRoot= "$Env:SystemRoot"
+        $SystemDrive= "$Env:SystemDrive"
+
+        Write-MyOutput 'Configuring Windows Defender folder exclusions'
         If( $State['TargetPath']) {
             $InstallFolder= $State['TargetPath']
         }
@@ -1831,13 +1828,76 @@ process {
             # TargetPath not specified, using default location
             $InstallFolder= 'C:\Program Files\Microsoft\Exchange Server\V15'
         }
-        $Locations= @( 'C:\ExchangeSetupLogs', $InstallFolder, $State['SourcePath'])
+
+        $Locations= @(
+            "$SystemRoot|Cluster", 
+            "$InstallFolder|ClientAccess\OAB,FIP-FS,GroupMetrics,Logging,Mailbox",
+            "$InstallFolder\TransportRoles\Data|IpFilter,Queue,SenderReputation,Temp",
+            "$InstallFolder\TransportRoles|Logs,Pickup,Replay",
+            "$InstallFolder\UnifiedMessaging|Grammars,Prompts,Temp,VoiceMail", 
+            "$InstallFolder|Working\OleConverter", 
+            "$SystemRoot\Microsoft.NET\Framework64\v4.0.30319|Temporary ASP.NET Files",
+            "$SystemDrive\InetPub\Temp|IIS Temporary Compressed Files", 
+            "$SystemRoot|System32\InetSrv",
+            "$SystemDrive|Temp\OICE_*"
+        )
+
         ForEach( $Location in $Locations) {
-            If( $Location) {
-                Write-Verbose "Excluding path: $Location"
-                Add-MpPreference -ExclusionPath $Location -ErrorAction SilentlyContinue
+            $Location
+            $Parts= $Location -split '\|'
+            $Items= $Parts[1] -split ','
+            ForEach( $Item in $Items) {
+                $ExcludeLocation= Join-Path -Path $Parts[0] -ChildPath $Item
+                Write-MyVerbose "WindowsDefender: Excluding location $ExcludeLocation"
+                try {
+                    Add-MpPreference -ExclusionPath $ExcludeLocation -ErrorAction SilentlyContinue
+                }
+                catch {
+                    Write-MyWarning $_.Exception.Message
+                }
             }
         }
+
+        Write-MyOutput 'Configuring Windows Defender exclusions: NodeRunner process'
+        $Processes= @(
+            "$InstallFolder\Bin|ComplianceAuditService.exe,Microsoft.Exchange.Directory.TopologyService.exe,Microsoft.Exchange.EdgeSyncSvc.exe,Microsoft.Exchange.Notifications.Broker.exe,Microsoft.Exchange.ProtectedServiceHost.exe,Microsoft.Exchange.RPCClientAccess.Service.exe,Microsoft.Exchange.Search.Service.exe,Microsoft.Exchange.Store.Service.exe,Microsoft.Exchange.Store.Worker.exe,MSExchangeCompliance.exe,MSExchangeDagMgmt.exe,MSExchangeDelivery.exe,MSExchangeFrontendTransport.exe,MSExchangeMailboxAssistants.exe,MSExchangeMailboxReplication.exe,MSExchangeRepl.exe,MSExchangeSubmission.exe,MSExchangeThrottling.exe,OleConverter.exe,UmService.exe,UmWorkerProcess.exe,wsbexchange.exe,EdgeTransport.exe,Microsoft.Exchange.AntispamUpdateSvc.exe,Microsoft.Exchange.Diagnostics.Service.exe,Microsoft.Exchange.Servicehost.exe,MSExchangeHMHost.exe,MSExchangeHMWorker.exe,MSExchangeTransport.exe,MSExchangeTransportLogSearch.exe",
+            "$InstallFolder\FIP-FS\Bin|fms.exe,ScanEngineTest.exe,ScanningProcess.exe,UpdateService.exe",
+            "$InstallFolder|Bin\Search\Ceres|HostController\HostControllerService.exe,Runtime\1.0\Noderunner.exe,ParserServer\ParserServer.exe",
+            "$SystemRoot\System32\InetSrv|inetinfo.exe,W3wp.exe",
+            "$InstallFolder|FrontEnd\PopImap|Microsoft.Exchange.Imap4.exe,Microsoft.Exchange.Pop3.exe",
+            "$InstallFolder|ClientAccess\PopImap\Microsoft.Exchange.Imap4service.exe,Microsoft.Exchange.Pop3service.exe",
+            "$InstallFolder|FrontEnd\CallRouter|Microsoft.Exchange.UM.CallRouter.exe",
+            "$InstallFolder|TransportRoles\agents\Hygiene\Microsoft.Exchange.ContentFilter.Wrapper.exe",
+            "$SystemRoot\System32\WindowsPowerShell\v1.0\Powershell.exe"
+        )
+
+        ForEach( $Process in $Processes) {
+            $Parts= $Process -split '\|'
+            $Items= $Parts[1] -split ','
+            ForEach( $Item in $Items) {
+                $ExcludeProcess= Join-Path -Path $Parts[0] -ChildPath $Item
+                Write-MyVerbose "WindowsDefender: Excluding process $ExcludeProcess"
+                try {
+                    Add-MpPreference -ExclusionProcess $ExcludeProcess -ErrorAction SilentlyContinue
+                }
+                catch {
+                    Write-MyWarning $_.Exception.Message
+                }
+            }
+        }
+
+        $Extensions= 'dsc', 'txt', 'cfg', 'grxml', 'lzx', 'config', 'chk', 'edb', 'jfm', 'jrs', 'log', 'que'
+        ForEach( $Extension in $Extensions) {
+            $ExcludeExtension= '.{0}' -f $Extension
+            Write-MyVerbose "WindowsDefender: Excluding extension $ExcludeExtension"
+            try {
+                Add-MpPreference -ExclusionExtension $ExcludeExtension -ErrorAction SilentlyContinue
+            }
+            catch {
+                Write-MyWarning $_.Exception.Message
+            }
+        }
+
     }
 
     ########################################
@@ -2163,7 +2223,6 @@ process {
                 }
                 $WS2016_MAJOR {
                     Package-Install "KB3206632" "Cumulative Update for Windows Server 2016 for x64-based Systems" "windows10.0-kb3206632-x64_b2e20b7e1aa65288007de21e88cd21c3ffb05110.msu" "http://download.windowsupdate.com/d/msdownload/update/software/secu/2016/12/windows10.0-kb3206632-x64_b2e20b7e1aa65288007de21e88cd21c3ffb05110.msu" ("/quiet", "/norestart")
-                    Configure-WindowsDefenderExcludeSetupInstallLogFolders
                     break
                 }
             }
@@ -2208,7 +2267,7 @@ process {
         5 {
             Write-MyOutput "Post-configuring"
             If( $MajorOSVersion -eq $WS2016_MAJOR) {
-                Configure-WindowsDefenderExcludeNodeRunner
+                Configure-WindowsDefenderExclusions
             }
 
             Configure-HighPerformancePowerPlan
