@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 2.97, December 19th, 2017
+    Version 2.98, April 1st, 2018
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius,
     Bobby West and everyone else who provided feedback.
@@ -176,9 +176,14 @@
             Added blocking of .NET Framework 4.7.1
             Consolidated .NET Framework blocking routines
             Modified version comparison routine
-    2.97    Added support for Exchange 2016 CU7
+    2.97    Added support for Exchange 2016 CU8
             Added support for Exchange 2013 CU19
             Added NONET471 switch
+    2.98    Added support for Exchange 2016 CU9
+            Added support for Exchange 2013 CU20
+            Added blocking of .NET Framework 4.7.2 (Preview)
+            Added upgrade mode detection
+            Added TargetPath usage for Recover mode
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -479,6 +484,7 @@ process {
     $EX2013SETUPEXE_CU17            = '15.00.1320.000'
     $EX2013SETUPEXE_CU18            = '15.00.1347.002'
     $EX2013SETUPEXE_CU19            = '15.00.1365.001'
+    $EX2013SETUPEXE_CU20            = '15.00.1367.003'
     $EX2016SETUPEXE_PRE             = '15.01.0225.016'
     $EX2016SETUPEXE_RTM             = '15.01.0225.042'
     $EX2016SETUPEXE_CU1             = '15.01.0396.030'
@@ -489,6 +495,7 @@ process {
     $EX2016SETUPEXE_CU6             = '15.01.1034.026'
     $EX2016SETUPEXE_CU7             = '15.01.1261.035'
     $EX2016SETUPEXE_CU8             = '15.01.1415.002'
+    $EX2016SETUPEXE_CU9             = '15.01.1466.003'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
@@ -547,6 +554,7 @@ process {
         $EX2013SETUPEXE_CU17= 'Exchange Server 2013 Cumulative Update 17';
         $EX2013SETUPEXE_CU18= 'Exchange Server 2013 Cumulative Update 18';
         $EX2013SETUPEXE_CU19= 'Exchange Server 2013 Cumulative Update 19';
+        $EX2013SETUPEXE_CU20= 'Exchange Server 2013 Cumulative Update 20';
         $EX2016SETUPEXE_PRE= 'Exchange Server 2016 Preview';
         $EX2016SETUPEXE_RTM= 'Exchange Server 2016 RTM';
         $EX2016SETUPEXE_CU1= 'Exchange Server 2016 Cumulative Update 1';
@@ -557,6 +565,7 @@ process {
         $EX2016SETUPEXE_CU6= 'Exchange Server 2016 Cumulative Update 6';
         $EX2016SETUPEXE_CU7= 'Exchange Server 2016 Cumulative Update 7';
         $EX2016SETUPEXE_CU8= 'Exchange Server 2016 Cumulative Update 8';
+        $EX2016SETUPEXE_CU9= 'Exchange Server 2016 Cumulative Update 9';
       }
       if ($Versions[$FileVersion]) {
         $res= "$FileVersion ($($Versions[$FileVersion]))"
@@ -612,7 +621,7 @@ process {
     Function Get-PSExecutionPolicy {
         $PSPolicyKey= Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell' -Name ExecutionPolicy -ErrorAction SilentlyContinue
         If( $PSPolicyKey) {
-            Write-Warning "PowerShell Execution Policy is set to $($PSPolicyKey.ExecutionPolicy) through GPO"
+            Write-MyWarning "PowerShell Execution Policy is set to $($PSPolicyKey.ExecutionPolicy) through GPO"
         }
         Else {
             Write-MyVerbose 'PowerShell Execution Policy not configured through GPO'
@@ -636,7 +645,7 @@ process {
                 }
             }
             Else {
-                Write-Warning "$FileName not present, skipping"
+                Write-MyWarning "$FileName not present, skipping"
                 $res= $false
             }
         }
@@ -809,7 +818,7 @@ process {
             Remove-Item $TempNam
         }
         Else {
-            Write-Warning "$FilePath\$FileName not found"
+            Write-MyWarning "$FilePath\$FileName not found"
         }
     }
 
@@ -837,7 +846,7 @@ process {
             Write-MyVerbose "Process exited with code $rval"
         }
         Else {
-            Write-Warning "$FullName not found"
+            Write-MyWarning "$FullName not found"
             $rval= -1
         }
         return $rval
@@ -958,11 +967,11 @@ process {
                 }
             }
             Else {
-                Write-Warning "Can't determine installation path to load Exchange module"
+                Write-MyWarning "Can't determine installation path to load Exchange module"
             }
         }
         Else {
-            Write-Warning 'Exchange module already loaded'
+            Write-MyWarning 'Exchange module already loaded'
         }
     }
 
@@ -976,43 +985,52 @@ process {
             $PresenceKey= 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{4934D1EA-BE46-48B1-8847-F1AF20E892C1}'
         }
         If( $State['Recover']) {
-            $Params= ('/mode:RecoverServer', '/IAcceptExchangeServerLicenseTerms', '/InstallWindowsComponents')
-        }
-        Else {
-            $roles= @()
-            If( $State['InstallMailbox']) {
-                $roles+= 'Mailbox'
-            }
-            If( $State['InstallCAS']) {
-                If( $State['MajorSetupVersion'] -ge $EX2016_MAJOR) {
-                        Write-Warning 'Ignoring specified InstallCAS option for Exchange 2016'
-                }
-                Else {
-                    $roles+= 'ClientAccess'
-                }
-            }
-	        $RolesParm= $roles -Join ','
-            $Params= ('/mode:install', "/roles:$RolesParm", '/IAcceptExchangeServerLicenseTerms', '/InstallWindowsComponents')
-            If( $State['InstallMailbox']) {
-                If( $State['InstallMDBName']) {
-                    $Params+= "/MdbName:$($State['InstallMDBName'])"
-                }
-                If( $State['InstallMDBDBPath']) {
-                    $Params+= "/DBFilePath:`"$($State['InstallMDBDBPath'])\$($State['InstallMDBName']).edb`""
-                }
-                If( $State['InstallMDBLogPath']) {
-                    $Params+= "/LogFolderPath:`"$($State['InstallMDBLogPath'])\$($State['InstallMDBName'])\Log`""
-                }
-            }
+            $Params= '/mode:RecoverServer', '/IAcceptExchangeServerLicenseTerms', '/DoNotStartTransport'
             If( $State['TargetPath']) {
                 $Params+= "/TargetDir:`"$($State['TargetPath'])`""
             }
         }
-        $Params+= '/DoNotStartTransport'
+        Else {
+            If( ( Get-Item $PresenceKey) -and (Get-Service -Name 'MSExchangeIS' -ErrorAction SilentlyContinue)) {
+                Write-MyWarning 'Exchange seems installed, using upgrade mode'
+                $Params= '/mode:Upgrade', '/IAcceptExchangeServerLicenseTerms'
+            }
+            Else {
+
+                $roles= @()
+                If( $State['InstallMailbox']) {
+                    $roles+= 'Mailbox'
+                }
+                If( $State['InstallCAS']) {
+                    If( $State['MajorSetupVersion'] -ge $EX2016_MAJOR) {
+                        Write-MyWarning 'Ignoring specified InstallCAS option for Exchange 2016'
+                    }
+                    Else {
+                       $roles+= 'ClientAccess'
+                    } 
+                }
+	        $RolesParm= $roles -Join ','
+                $Params= '/mode:install', "/roles:$RolesParm", '/IAcceptExchangeServerLicenseTerms', '/DoNotStartTransport', '/InstallWindowsComponents'
+                If( $State['InstallMailbox']) {
+                    If( $State['InstallMDBName']) {
+                        $Params+= "/MdbName:$($State['InstallMDBName'])"
+                    }
+                    If( $State['InstallMDBDBPath']) {
+                        $Params+= "/DBFilePath:`"$($State['InstallMDBDBPath'])\$($State['InstallMDBName']).edb`""
+                    }
+                    If( $State['InstallMDBLogPath']) {
+                        $Params+= "/LogFolderPath:`"$($State['InstallMDBLogPath'])\$($State['InstallMDBName'])\Log`""
+                    }
+                }
+                If( $State['TargetPath']) {
+                    $Params+= "/TargetDir:`"$($State['TargetPath'])`""
+                }
+            }
+        }
 
         $res= StartWait-Process $State['SourcePath'] 'setup.exe' $Params
         If( $res -ne 0 -or -not( Get-Item $PresenceKey -ErrorAction SilentlyContinue)){
-                Write-MyError 'Problem installing Exchange. Please consult the Exchange setup log, i.e. C:\ExchangeSetupLogs\ExchangeSetup.log'
+                Write-MyError 'Exchange Setup exited with non-zero value. Please consult the Exchange setup log, i.e. C:\ExchangeSetupLogs\ExchangeSetup.log'
                 Exit $ERR_PROBLEMEXCHANGESETUP
         }
     }
@@ -1058,7 +1076,7 @@ process {
             }
         }
         Else {
-            Write-Warning "Exchange organization $($State['OrganizationName']) already exists, skipping this step"
+            Write-MyWarning "Exchange organization $($State['OrganizationName']) already exists, skipping this step"
         }
     }
 
@@ -1318,6 +1336,7 @@ process {
             0='Unknown';
             $NETVERSION_45='4.5'; $NETVERSION_451='4.5.1'; $NETVERSION_452='4.5.2'; $NETVERSION_452KB31467178='4.5.2 & KB3146717/3146718';
             $NETVERSION_46='4.6'; $NETVERSION_461='4.6.1'; $NETVERSION_462='4.6.2'; $NETVERSION_462WS2016='4.6.2 (WS2016)'; $NETVERSION_47='4.7';
+            $NETVERSION_471='4.7.1';
         }
         return ($NetVersions.GetEnumerator() | Where {$NetVersion -ge $_.Name} | Sort Name -Descending | Select -First 1).Value
     }
@@ -1517,7 +1536,7 @@ process {
             Exit $ERR_UNEXPECTEDOS
         }
         If( $UseWMF3 -and (is-MinimalBuild $SetupVersion $EX2013SETUPEXE_SP1)) {
-            Write-Warning 'WMF3 is not supported for Exchange Server 2013 SP1 and up'
+            Write-MyWarning 'WMF3 is not supported for Exchange Server 2013 SP1 and up'
         }
         If( $State['NoSetup'] -or $State['Recover']) {
             Write-MyOutput 'Not checking roles (NoSetup or Recover mode)'
@@ -1530,7 +1549,7 @@ process {
                     Exit $ERR_UNKNOWNROLESSPECIFIED
                 }
                 If ( $State['InstallCAS']) {
-                    Write-Warning 'Exchange 2016 setup detected, will ignore deprecated InstallCAS parameter'
+                    Write-MyWarning 'Exchange 2016 setup detected, will ignore deprecated InstallCAS parameter'
                 }
             }
             Else {
@@ -1559,7 +1578,7 @@ process {
 
         Write-MyOutput 'Checking NIC configuration ..'
         If(! (Get-WmiObject Win32_NetworkAdapterConfiguration -Filter {IPEnabled=True and DHCPEnabled=False})) {
-            Write-Warning "System doesn't have a static IP addresses configured"
+            Write-MyWarning "System doesn't have a static IP addresses configured"
         }
 
         If ( $State['TargetPath']) {
@@ -1657,7 +1676,7 @@ process {
 
         If( Get-PSExecutionPolicy) {
             # Referring to http://support.microsoft.com/kb/2810617/en
-            Write-Warning 'PowerShell Execution Policy is configured through GPO and may prohibit Exchange Setup. Clearing entry.'
+            Write-MyWarning 'PowerShell Execution Policy is configured through GPO and may prohibit Exchange Setup. Clearing entry.'
             Remove-ItemProperty -Path HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell -Name ExecutionPolicy -Force
         }
     }
@@ -1935,7 +1954,7 @@ process {
     Write-MyOutput "Checking for pending reboot .."
     If( is-RebootPending ) {
         If( $State["AutoPilot"]) {
-            Write-Warning "Reboot pending, will reboot system and rerun phase"
+            Write-MyWarning "Reboot pending, will reboot system and rerun phase"
         }
         Else {
             Write-MyError "Reboot pending, please reboot system and restart script (parameters will be saved)"
@@ -2014,6 +2033,7 @@ process {
                 # Check .NET FrameWork 4.7.1 installed
                 If( $State["Install471"]) {
                     Remove-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
+                    Set-NETFrameworkInstallBlock '4.7.2' 'Preview' '472'
                     If( (Get-NETVersion) -lt $NETVERSION_471) {
                         Package-Install "KB4033342" "Microsoft .NET Framework 4.7.1" "NDP471-KB4033342-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/9/E/6/9E63300C-0941-4B45-A0EC-0008F96DD480/NDP471-KB4033342-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
                     }
@@ -2031,6 +2051,7 @@ process {
                             Remove-NETFrameworkInstallBlock '4.6.1' 'KB3133990' '461'
                             Set-NETFrameworkInstallBlock '4.7' 'KB4024204' '47'
                             Set-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
+                            Set-NETFrameworkInstallBlock '4.7.2' 'Preview' '472'
                             If( (Get-NETVersion) -lt $NETVERSION_461) {
                                 Package-Install "KB3102467" "Microsoft .NET Framework 4.6.1" "NDP461-KB3102436-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/E/4/1/E4173890-A24A-4936-9FC9-AF930FE3FA40/NDP461-KB3102436-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
                             }
@@ -2043,6 +2064,7 @@ process {
                             Remove-NETFrameworkInstallBlock '4.6.2', 'KB3102436' '462'
                             Set-NETFrameworkInstallBlock '4.7' 'KB4024204' '47'
                             Set-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
+                            Set-NETFrameworkInstallBlock '4.7.2' 'Preview' '472'
                             If( (Get-NETVersion) -lt $NETVERSION_462) {
                                 Package-Install "KB3102436" "Microsoft .NET Framework 4.6.2" "NDP462-KB3151800-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/F/9/4/F942F07D-F26F-4F30-B4E3-EBD54FABA377/NDP462-KB3151800-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
                             }
@@ -2073,11 +2095,11 @@ process {
                 }
             }
             Else {
+                Set-NETFrameworkInstallBlock '4.7.2' 'Preview' '472'
                 Set-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
                 Set-NETFrameworkInstallBlock '4.7' 'KB4024204' '47'
                 Set-NETFrameworkInstallBlock '4.6.2' 'KB3102436' '462'
                 Set-NETFrameworkInstallBlock '4.6.1' 'KB3133990' '461'
-
                 # Check .NET FrameWork 4.5.2 or later installed
                 If( (Get-NETVersion) -lt $NETVERSION_452) {
                     Write-MyOutput ".NET Framework 4.5.2 will be installed"
