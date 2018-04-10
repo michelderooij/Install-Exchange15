@@ -1602,7 +1602,7 @@ process {
             }
         }
         If ( $State['InstallMDBDBPath']) {
-            $Location= Split-Path $State['InstallMDBLogPath'] -Qualifier
+            $Location= Split-Path $State['InstallMDBDBPath'] -Qualifier
             Write-MyOutput 'Checking MDB database path ..'
             If( !(Test-Path $Location)) {
                 Write-MyError "MDB database location unavailable: ($Location)"
