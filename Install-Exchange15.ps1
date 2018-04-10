@@ -1564,7 +1564,7 @@ process {
             }
         }
 
-        If( ( Test-ExistingExchangeServer $env:computerName) -and ($State["InstallPhase"] -eq 0)) {
+        If( ( Test-ExistingExchangeServer $env:computerName)) { # -and ($State["InstallPhase"] -eq 0) : Never will come
             If( $State['Recover']) {
                 Write-MyOutput 'Recovery mode specified, Exchange server object found'
             }
