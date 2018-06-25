@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 2.99, April 2nd, 2018
+    Version 2.991, May 5th, 2018
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius,
     Bobby West and everyone else who provided feedback.
@@ -185,6 +185,9 @@
             Added upgrade mode detection
             Added TargetPath usage for Recover mode
     2.99    Added Windows Defender exclusions (Ex2016 on WS2016)
+    2.991   Fixed .NET blockade removal
+            Fixed upgrade detection
+            Minor bugs and cosmetics fixes
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -983,10 +986,10 @@ process {
         $ver= $State['MajorSetupVersion']
         Write-MyOutput "Installing Microsoft Exchange Server ($ver)"
         If( $State['MajorSetupVersion'] -ge $EX2016_MAJOR) {
-            $PresenceKey= 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{CD981244-E9B8-405A-9026-6AEB9DCEF1F1}'
+            $PresenceKey= 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{CD981244-E9B8-405A-9026-6AEB9DCEF1F1}\InstallDate'
         }
         Else {
-            $PresenceKey= 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{4934D1EA-BE46-48B1-8847-F1AF20E892C1}'
+            $PresenceKey= 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{4934D1EA-BE46-48B1-8847-F1AF20E892C1}\InstallDate'
         }
         If( $State['Recover']) {
             $Params= '/mode:RecoverServer', '/IAcceptExchangeServerLicenseTerms', '/DoNotStartTransport'
@@ -995,8 +998,8 @@ process {
             }
         }
         Else {
-            If( ( Get-Item $PresenceKey) -and (Get-Service -Name 'MSExchangeIS' -ErrorAction SilentlyContinue)) {
-                Write-MyWarning 'Exchange seems installed, using upgrade mode'
+            If( ( Get-ItemProperty -Path (Split-Path $PresenceKey -Parent) -Name (Split-Path -Path $presenceKey -Leaf) -ErrorAction SilentlyContinue) -and (Get-Service -Name 'MSExchangeIS' -ErrorAction SilentlyContinue)) {
+                Write-MyWarning 'Exchange seems installed, trying upgrade mode'
                 $Params= '/mode:Upgrade', '/IAcceptExchangeServerLicenseTerms'
             }
             Else {
@@ -1372,13 +1375,12 @@ process {
         $RegName= ('BlockNetFramework{0}' -f $Key)
         If( Get-ItemProperty -Path $RegKey -Name $RegName -ErrorAction SilentlyContinue) {
             Write-MyOutput ('Remove installation blockade for .NET Framework {0} ({1})' -f $Version, $KB)
-            Remove-Item -Path (Split-Path $RegKey -Parent) -Name (Split-Path $RegKey -Leaf) -ErrorAction SilentlyContinue | out-null
+            Remove-ItemProperty -Path $RegKey -Name $RegName -ErrorAction SilentlyContinue | out-null
         }
         If( Get-ItemProperty -Path $RegKey -Name $RegName -ErrorAction SilentlyContinue) {
             Write-MyError "Unable to set registry entry $RegKey\$RegName"
         }
     }
-
 
     Function Start-7318DrainNGenQueue {
         Write-MyOutput 'Optimizing .NET Framework (7318.DrainNGenQueue)'
@@ -1496,7 +1498,7 @@ process {
         If( $ExOrg) {
             If( $State['OrganizationName']) {
                 If( $State['OrganizationName'] -ne $ExOrg) {
-                    Write-MyError "OrganizationName mismatches with discovered Exchange Organization name ($ExOrg)"
+                    Write-MyError "OrganizationName mismatches with discovered Exchange Organization name ($ExOrg, expected $($State['OrganizationName']))"
                     Exit $ERR_ORGANIZATIONNAMEMISMATCH
                 }
             }
