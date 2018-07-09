@@ -1566,12 +1566,12 @@ process {
             }
         }
 
-        If( ( Test-ExistingExchangeServer $env:computerName)) { # -and ($State["InstallPhase"] -eq 0) : Never will come
+        If( ( Test-ExistingExchangeServer $env:computerName) -and ($State["InstallPhase"] -eq 1)) {
             If( $State['Recover']) {
                 Write-MyOutput 'Recovery mode specified, Exchange server object found'
             }
             Else {
-                Write-MyError 'Existing Exchange server object found for this computer, please use the Recover option to recover this Exchange server'
+                Write-MyError 'Existing Exchange server object found for this computer, please use the Recover option when you need to recover this Exchange server'
                 Exit $ERR_PROBLEMEXCHANGESERVEREXISTS
             }
         }
@@ -1976,11 +1976,11 @@ process {
     }
 
     If( $State.containsKey("LastSuccessfulPhase")) {
-	    Write-MyVerbose "Continuing from last successful phase $($State["InstallPhase"])"
+	Write-MyVerbose "Continuing from last successful phase $($State["InstallPhase"])"
         $State["InstallPhase"]= $State["LastSuccessfulPhase"]
     }
     If( $PSBoundParameters.ContainsKey('Phase')) {
-	    Write-MyVerbose "Phase manually set to $Phase"
+	Write-MyVerbose "Phase manually set to $Phase"
         $State["InstallPhase"]= $Phase
     }
     Else {
