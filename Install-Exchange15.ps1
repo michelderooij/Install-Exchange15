@@ -935,12 +935,15 @@ process {
         }
     }
 
-   Function Test-ExistingExchangeServer( [string]$Name) {
-        $NC= Get-RootNC
+    Function Test-ExistingExchangeServer( [string]$Name) {
+        $DE = New-Object System.DirectoryServices.DirectoryEntry
+        $Configuration = (($DE.Properties["objectCategory"]).ToString())
+        $index = $Configuration.IndexOf('CN=Configuration')
+        $Configuration = $Configuration.Substring($index)
         $LDAPSearch= New-Object System.DirectoryServices.DirectorySearcher
-        $LDAPSearch.SearchRoot= "LDAP://CN=Configuration,$NC"
-        $LDAPSearch.Filter= "(&(cn=$Name)(objectClass=msExchExchangeServer))"
-        $Results= $LDAPSearch.FindAll()
+        $LDAPSearch.SearchRoot = "LDAP://$Configuration"
+        $LDAPSearch.Filter = "(&(cn=$Name)(objectClass=msExchExchangeServer))"
+        $Results = $LDAPSearch.FindAll()
         Return ($Results.Count -gt 0)
     }
 
@@ -1011,7 +1014,7 @@ process {
                     }
                     Else {
                        $roles+= 'ClientAccess'
-                    } 
+                    }
                 }
 	        $RolesParm= $roles -Join ','
                 $Params= '/mode:install', "/roles:$RolesParm", '/IAcceptExchangeServerLicenseTerms', '/DoNotStartTransport', '/InstallWindowsComponents'
@@ -1563,7 +1566,7 @@ process {
             }
         }
 
-        If( ( Test-ExistingExchangeServer $env:computerName) -and ($State["InstallPhase"] -eq 0)) {
+        If( ( Test-ExistingExchangeServer $env:computerName)) { # -and ($State["InstallPhase"] -eq 0) : Never will come
             If( $State['Recover']) {
                 Write-MyOutput 'Recovery mode specified, Exchange server object found'
             }
@@ -1601,7 +1604,7 @@ process {
             }
         }
         If ( $State['InstallMDBDBPath']) {
-            $Location= Split-Path $State['InstallMDBLogPath'] -Qualifier
+            $Location= Split-Path $State['InstallMDBDBPath'] -Qualifier
             Write-MyOutput 'Checking MDB database path ..'
             If( !(Test-Path $Location)) {
                 Write-MyError "MDB database location unavailable: ($Location)"
@@ -1832,14 +1835,14 @@ process {
         }
 
         $Locations= @(
-            "$SystemRoot|Cluster", 
+            "$SystemRoot|Cluster",
             "$InstallFolder|ClientAccess\OAB,FIP-FS,GroupMetrics,Logging,Mailbox",
             "$InstallFolder\TransportRoles\Data|IpFilter,Queue,SenderReputation,Temp",
             "$InstallFolder\TransportRoles|Logs,Pickup,Replay",
-            "$InstallFolder\UnifiedMessaging|Grammars,Prompts,Temp,VoiceMail", 
-            "$InstallFolder|Working\OleConverter", 
+            "$InstallFolder\UnifiedMessaging|Grammars,Prompts,Temp,VoiceMail",
+            "$InstallFolder|Working\OleConverter",
             "$SystemRoot\Microsoft.NET\Framework64\v4.0.30319|Temporary ASP.NET Files",
-            "$SystemDrive\InetPub\Temp|IIS Temporary Compressed Files", 
+            "$SystemDrive\InetPub\Temp|IIS Temporary Compressed Files",
             "$SystemRoot|System32\InetSrv",
             "$SystemDrive|Temp\OICE_*"
         )
