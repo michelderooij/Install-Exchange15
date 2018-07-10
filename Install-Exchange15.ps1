@@ -1036,9 +1036,9 @@ process {
         }
 
         $res= StartWait-Process $State['SourcePath'] 'setup.exe' $Params
-        If( $res -ne 0 -or -not( Get-Item $PresenceKey -ErrorAction SilentlyContinue)){
-                Write-MyError 'Exchange Setup exited with non-zero value. Please consult the Exchange setup log, i.e. C:\ExchangeSetupLogs\ExchangeSetup.log'
-                Exit $ERR_PROBLEMEXCHANGESETUP
+        If( $res -ne 0 -or -not( Get-ItemProperty -Path (Split-Path $PresenceKey -Parent) -Name (Split-Path -Path $presenceKey -Leaf) -ErrorAction SilentlyContinue)) {
+            Write-MyError 'Exchange Setup exited with non-zero value. Please consult the Exchange setup log, i.e. C:\ExchangeSetupLogs\ExchangeSetup.log'
+            Exit $ERR_PROBLEMEXCHANGESETUP
         }
     }
 
