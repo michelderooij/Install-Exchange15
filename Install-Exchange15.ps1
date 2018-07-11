@@ -8,10 +8,10 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 2.991, May 5th, 2018
+    Version 2.99.3, July 11th, 2018
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius,
-    Bobby West and everyone else who provided feedback.
+    Bobby West, Pavel Andreev and everyone else who provided feedback or contributed in other ways.
 
     .DESCRIPTION
     This script can install Exchange 2013/2016 prerequisites, optionally create the Exchange
@@ -188,6 +188,16 @@
     2.991   Fixed .NET blockade removal
             Fixed upgrade detection
             Minor bugs and cosmetics fixes
+    2.99.2  Fixed Recover Mode Phase 
+            Fixed InstallMDBDBPath location check
+            Added support for for Exchange 2016 CU10
+            Added support for for Exchange 2013 CU21
+            Added Visual C++ Redistributable prereq (Ex2016CU10+/Ex2013CU21+)
+            Fixed Exchange setup result detection
+            Changed code to determine AD Configuration container
+            Changed script to abort on non-static IP presence
+            Removed InstallFilterPack switch (obsolete)
+            Code cleanup and cosmetics
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -239,9 +249,6 @@
     .PARAMETER IncludeFixes
     Depending on operating system and detected Exchange version to install, will download
     and install additional recommended Exchange hotfixes.
-
-    .PARAMETER InstallFilterPack
-    Adds installing Office filters for OneNote & Publisher support.
 
     .PARAMETER UseWMF3
     Installs WMF3 instead of WMF4 for Exchange 2013 SP1 or later.
@@ -361,11 +368,6 @@ param(
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
-                [Switch]$InstallFilterPack,
- 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
-	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
-	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
-	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
                 [Switch]$NoNet461,
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
@@ -407,9 +409,11 @@ param(
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='AutoPilot')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
-        	[ValidateRange(0,5)]
-	        [int]$Phase
-   )
+                [ValidateRange(0,6)]
+	        [int]$Phase,
+        [parameter( Mandatory= $false)]
+                [switch]$InstallFilterPack
+)
 
 process {
 
@@ -437,13 +441,8 @@ process {
     $ERR_PROBLEMPACKAGEDL           = 1120
     $ERR_PROBLEMPACKAGESETUP        = 1121
     $ERR_PROBLEMPACKAGEEXTRACT      = 1122
-    $ERR_PROBLEMFILTERPACKDL        = 1131
-    $ERR_PROBLEMFILTERPACKSETUP     = 1132
-    $ERR_PROBLEMFILTERPACKSP1DL     = 1133
-    $ERR_PROBLEMFILTERPACKSP1SETUP  = 1134
     $ERR_BADFORESTLEVEL             = 1151
     $ERR_BADDOMAINLEVEL             = 1152
-    $ERR_NOTSUPPORTED               = 1153
     $ERR_MISSINGEXCHANGESETUP       = 1201
     $ERR_PROBLEMEXCHANGESETUP       = 1202
     $ERR_PROBLEMEXCHANGESERVEREXISTS= 1203
@@ -464,7 +463,7 @@ process {
     $EX2013_MAJOR                   = '15.0'
     $EX2016_MAJOR                   = '15.1'
 
-    # Exchange Install key
+    # Exchange Install registry key
     $EXCHANGEINSTALLKEY             = "HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup"
 
     # Supported Exchange versions (setup.exe)
@@ -489,6 +488,7 @@ process {
     $EX2013SETUPEXE_CU18            = '15.00.1347.002'
     $EX2013SETUPEXE_CU19            = '15.00.1365.001'
     $EX2013SETUPEXE_CU20            = '15.00.1367.003'
+    $EX2013SETUPEXE_CU21            = '15.00.1395.004'
     $EX2016SETUPEXE_PRE             = '15.01.0225.016'
     $EX2016SETUPEXE_RTM             = '15.01.0225.042'
     $EX2016SETUPEXE_CU1             = '15.01.0396.030'
@@ -500,6 +500,7 @@ process {
     $EX2016SETUPEXE_CU7             = '15.01.1261.035'
     $EX2016SETUPEXE_CU8             = '15.01.1415.002'
     $EX2016SETUPEXE_CU9             = '15.01.1466.003'
+    $EX2016SETUPEXE_CU10            = '15.01.1531.003'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
@@ -518,6 +519,9 @@ process {
     $NETVERSION_462WS2016           = 394802
     $NETVERSION_47                  = 460798
     $NETVERSION_471                 = 461310
+    $NETVERSION_472                 = 461814
+
+    $ScriptVersion                  = '2.99.3'
 
     Function Save-State( $State) {
         Write-MyVerbose "Saving state information to $StateFile"
@@ -535,6 +539,7 @@ process {
         }
         Return $State
     }
+
 
     Function Setup-TextVersion( $FileVersion) {
       $Versions= @{
@@ -559,6 +564,7 @@ process {
         $EX2013SETUPEXE_CU18= 'Exchange Server 2013 Cumulative Update 18';
         $EX2013SETUPEXE_CU19= 'Exchange Server 2013 Cumulative Update 19';
         $EX2013SETUPEXE_CU20= 'Exchange Server 2013 Cumulative Update 20';
+        $EX2013SETUPEXE_CU21= 'Exchange Server 2013 Cumulative Update 21';
         $EX2016SETUPEXE_PRE= 'Exchange Server 2016 Preview';
         $EX2016SETUPEXE_RTM= 'Exchange Server 2016 RTM';
         $EX2016SETUPEXE_CU1= 'Exchange Server 2016 Cumulative Update 1';
@@ -570,15 +576,17 @@ process {
         $EX2016SETUPEXE_CU7= 'Exchange Server 2016 Cumulative Update 7';
         $EX2016SETUPEXE_CU8= 'Exchange Server 2016 Cumulative Update 8';
         $EX2016SETUPEXE_CU9= 'Exchange Server 2016 Cumulative Update 9';
+        $EX2016SETUPEXE_CU10= 'Exchange Server 2016 Cumulative Update 10';
       }
       if ($Versions[$FileVersion]) {
-        $res= "$FileVersion ($($Versions[$FileVersion]))"
+        $res= "$($Versions[$FileVersion]) (build $FileVersion)"
       }
       Else {
-        $res= "$FileVersion (Unknown Version)"
+        $res= "Unknown version (build $FileVersion)"
       }
       return $res
     }
+
     Function File-DetectVersion( $File) {
         $res= 0
         If( Test-Path $File) {
@@ -633,6 +641,7 @@ process {
         return $PSPolicyKey
     }
 
+
     Function Check-Package () {
         Param ( [String]$Package, [String]$URL, [String]$FileName, [String]$InstallPath)
         $res= $true
@@ -672,19 +681,14 @@ process {
         $FRNC= Get-ForestRootNC
         $ADRootSID= ([ADSI]"LDAP://$FRNC").ObjectSID[0]
         $SID= (New-object System.Security.Principal.SecurityIdentifier ($ADRootSID, 0)).Value.toString()
-        return [Security.Principal.WindowsIdentity]::GetCurrent().Groups | where {$_.Value -eq "$SID-518"}
+        return [Security.Principal.WindowsIdentity]::GetCurrent().Groups | Where-Object {$_.Value -eq "$SID-518"}
     }
 
     Function Test-EnterpriseAdmin {
         $FRNC= Get-ForestRootNC
         $ADRootSID= ([ADSI]"LDAP://$FRNC").ObjectSID[0]
         $SID= (New-object System.Security.Principal.SecurityIdentifier ($ADRootSID, 0)).Value.toString()
-        return [Security.Principal.WindowsIdentity]::GetCurrent().Groups | Where {$_.Value -eq "$SID-519"}
-    }
-
-    Function get-DomainSecurityPrincipal {
-        $FullPlainTextAccount= get-FullDomainAccount
-        $UserObject= New-Object System.Security.Principal.NTAccount( $FullPlainTextAccount)
+        return [Security.Principal.WindowsIdentity]::GetCurrent().Groups | Where-Object {$_.Value -eq "$SID-519"}
     }
 
     Function is-MinimalBuild() {
@@ -847,7 +851,7 @@ process {
             }
           Write-MyVerbose "Executing $Cmd $($ArgumentList -Join ' ')"
           $rval=( Start-Process -FilePath $Cmd -ArgumentList $ArgumentList -NoNewWindow -PassThru -Wait).Exitcode
-            Write-MyVerbose "Process exited with code $rval"
+          Write-MyVerbose "Process exited with code $rval"
         }
         Else {
             Write-MyWarning "$FullName not found"
@@ -862,10 +866,14 @@ process {
         return ([ADSI]'').distinguishedName
     }
 
+    Function Get-ForestConfigurationNC {
+        return ([ADSI]'LDAP://RootDSE').configurationNamingContext
+    }
+
     Function Get-ForestFunctionalLevel {
-        $NC= Get-ForestRootNC
+        $CNC= Get-ForestConfigurationNC
         Try {
-            $rval= ( ([ADSI]"LDAP://cn=partitions,cn=configuration,$NC").get('msDS-Behavior-Version') )
+            $rval= ( ([ADSI]"LDAP://cn=partitions,$CNC").get('msDS-Behavior-Version') )
         }
         Catch {
             Write-MyError "Can't read Forest schema version, operator possibly not member of Schema Admin group"
@@ -879,9 +887,9 @@ process {
     }
 
     Function Get-ExchangeOrganization {
-        $NC= Get-ForestRootNC
+        $CNC= Get-ForestConfigurationNC
         Try {
-            $ExOrgContainer= [ADSI]"LDAP://CN=Microsoft Exchange,CN=Services,CN=Configuration,$NC"
+            $ExOrgContainer= [ADSI]"LDAP://CN=Microsoft Exchange,CN=Services,$CNC"
             $rval= ($ExOrgContainer.PSBase.Children | Where-Object { $_.objectClass -eq 'msExchOrganizationContainer' }).Name
         }
         Catch {
@@ -892,13 +900,13 @@ process {
     }
 
     Function Test-ExchangeOrganization( $Organization) {
-        $NC= Get-ForestRootNC
-        return( [ADSI]"LDAP://CN=$Organization,CN=Microsoft Exchange,CN=Services,CN=Configuration,$NC")
+        $CNC= Get-ForestConfigurationNC
+        return( [ADSI]"LDAP://CN=$Organization,CN=Microsoft Exchange,CN=Services,$CNC")
     }
 
     Function Get-ExchangeForestLevel {
-        $NC= Get-ForestRootNC
-        return ( ([ADSI]"LDAP://CN=ms-Exch-Schema-Version-Pt,CN=Schema,CN=Configuration,$NC").rangeUpper )
+        $CNC= Get-ForestConfigurationNC
+        return ( ([ADSI]"LDAP://CN=ms-Exch-Schema-Version-Pt,CN=Schema,$CNC").rangeUpper )
     }
 
     Function Get-ExchangeDomainLevel {
@@ -907,9 +915,9 @@ process {
     }
 
     Function Clear-AutodiscoverServiceConnectionPoint( [string]$Name) {
-        $NC= Get-RootNC
+        $CNC= Get-ForestConfigurationNC
         $LDAPSearch= New-Object System.DirectoryServices.DirectorySearcher
-        $LDAPSearch.SearchRoot= "LDAP://CN=Configuration,$NC"
+        $LDAPSearch.SearchRoot= "LDAP://$CNC"
         $LDAPSearch.Filter= "(&(cn=$Name)(objectClass=serviceConnectionPoint)(serviceClassName=ms-Exchange-AutoDiscover-Service)(|(keywords=67661d7F-8FC4-4fa7-BFAC-E1D7794C1F68)(keywords=77378F46-2C66-4aa9-A6A6-3E7A48B19596)))"
         $LDAPSearch.FindAll() | ForEach-Object {
             Write-MyVerbose "Removing object $($_.Path)"
@@ -918,9 +926,9 @@ process {
     }
 
    Function Set-AutodiscoverServiceConnectionPoint( [string]$Name, [string]$ServiceBinding) {
-        $NC= Get-RootNC
+        $CNC= Get-ForestConfigurationNC
         $LDAPSearch= New-Object System.DirectoryServices.DirectorySearcher
-        $LDAPSearch.SearchRoot= "LDAP://CN=Configuration,$NC"
+        $LDAPSearch.SearchRoot= "LDAP://$CNC"
         $LDAPSearch.Filter= "(&(cn=$Name)(objectClass=serviceConnectionPoint)(serviceClassName=ms-Exchange-AutoDiscover-Service)(|(keywords=67661d7F-8FC4-4fa7-BFAC-E1D7794C1F68)(keywords=77378F46-2C66-4aa9-A6A6-3E7A48B19596)))"
         $LDAPSearch.FindAll() | ForEach-Object {
             Write-MyVerbose "Setting serviceBindingInformation on $($_.Path) to $ServiceBinding"
@@ -936,12 +944,9 @@ process {
     }
 
     Function Test-ExistingExchangeServer( [string]$Name) {
-        $DE = New-Object System.DirectoryServices.DirectoryEntry
-        $Configuration = (($DE.Properties["objectCategory"]).ToString())
-        $index = $Configuration.IndexOf('CN=Configuration')
-        $Configuration = $Configuration.Substring($index)
+        $CNC= Get-ForestConfigurationNC
         $LDAPSearch= New-Object System.DirectoryServices.DirectorySearcher
-        $LDAPSearch.SearchRoot = "LDAP://$Configuration"
+        $LDAPSearch.SearchRoot = "LDAP://$CNC"
         $LDAPSearch.Filter = "(&(cn=$Name)(objectClass=msExchExchangeServer))"
         $Results = $LDAPSearch.FindAll()
         Return ($Results.Count -gt 0)
@@ -963,7 +968,7 @@ process {
     Function Load-ExchangeModule {
         Write-MyVerbose 'Loading Exchange PowerShell module'
         If( -not ( Get-Command Connect-ExchangeServer -ErrorAction SilentlyContinue)) {
-            $SetupPath= (Get-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup -Name MsiInstallPath -ErrorAction SilentlyContinue).MsiInstallPath
+            $SetupPath= (Get-ItemProperty -Path $EXCHANGEINSTALLKEY -Name MsiInstallPath -ErrorAction SilentlyContinue).MsiInstallPath
             If( $SetupPath -and (Test-Path "$SetupPath\bin\RemoteExchange.ps1" )) {
                 . "$SetupPath\bin\RemoteExchange.ps1" | Out-Null
                 Try {
@@ -986,20 +991,21 @@ process {
         $ver= $State['MajorSetupVersion']
         Write-MyOutput "Installing Microsoft Exchange Server ($ver)"
         If( $State['MajorSetupVersion'] -ge $EX2016_MAJOR) {
-            $PresenceKey= 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{CD981244-E9B8-405A-9026-6AEB9DCEF1F1}\InstallDate'
+            $PresenceKey= 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{CD981244-E9B8-405A-9026-6AEB9DCEF1F1}'
         }
         Else {
-            $PresenceKey= 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{4934D1EA-BE46-48B1-8847-F1AF20E892C1}\InstallDate'
+            $PresenceKey= 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{4934D1EA-BE46-48B1-8847-F1AF20E892C1}'
         }
         If( $State['Recover']) {
+            Write-MyOutput 'Wil run Setup in recover mode'
             $Params= '/mode:RecoverServer', '/IAcceptExchangeServerLicenseTerms', '/DoNotStartTransport'
             If( $State['TargetPath']) {
                 $Params+= "/TargetDir:`"$($State['TargetPath'])`""
             }
         }
         Else {
-            If( ( Get-ItemProperty -Path (Split-Path $PresenceKey -Parent) -Name (Split-Path -Path $presenceKey -Leaf) -ErrorAction SilentlyContinue) -and (Get-Service -Name 'MSExchangeIS' -ErrorAction SilentlyContinue)) {
-                Write-MyWarning 'Exchange seems installed, trying upgrade mode'
+            If( $State['Upgrade']) {
+                Write-MyOutput 'Wil run Setup in upgrade mode'
                 $Params= '/mode:Upgrade', '/IAcceptExchangeServerLicenseTerms'
             }
             Else {
@@ -1010,13 +1016,13 @@ process {
                 }
                 If( $State['InstallCAS']) {
                     If( $State['MajorSetupVersion'] -ge $EX2016_MAJOR) {
-                        Write-MyWarning 'Ignoring specified InstallCAS option for Exchange 2016'
+                        Write-MyWarning 'Ignoring InstallCAS option for Exchange 2016'
                     }
                     Else {
                        $roles+= 'ClientAccess'
                     }
                 }
-	        $RolesParm= $roles -Join ','
+	            $RolesParm= $roles -Join ','
                 $Params= '/mode:install', "/roles:$RolesParm", '/IAcceptExchangeServerLicenseTerms', '/DoNotStartTransport', '/InstallWindowsComponents'
                 If( $State['InstallMailbox']) {
                     If( $State['InstallMDBName']) {
@@ -1036,8 +1042,8 @@ process {
         }
 
         $res= StartWait-Process $State['SourcePath'] 'setup.exe' $Params
-        If( $res -ne 0 -or -not( Get-Item $PresenceKey -ErrorAction SilentlyContinue)){
-                Write-MyError 'Exchange Setup exited with non-zero value. Please consult the Exchange setup log, i.e. C:\ExchangeSetupLogs\ExchangeSetup.log'
+        If( $res -ne 0 -or -not( Get-ItemProperty -Path $PresenceKey -Name InstallDate -ErrorAction SilentlyContinue)){
+                Write-MyError 'Exchange Setup exited with non-zero value or Install info missing from registry: Please consult the Exchange setup log, i.e. C:\ExchangeSetupLogs\ExchangeSetup.log'
                 Exit $ERR_PROBLEMEXCHANGESETUP
         }
     }
@@ -1204,39 +1210,11 @@ process {
         }
     }
 
-    Function Enable-IFilters {
-        # From: Brian Reid (@BrianReidC7)
-        # Note: Requires restarting "Microsoft Exchange Transport" and "Microsoft Filtering Management Service", but reboot will take care of that
-        Write-MyOutput 'Enabling OneNote and Publisher filtering'
-        $iFilterDirName = 'C:\Program Files\Common Files\Microsoft Shared\Filters\'
-        $KeyParent = 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\HubTransportRole'
-        $CLSIDKey = 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\HubTransportRole\CLSID'
-        $FiltersKey = 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\HubTransportRole\filters'
-        $ONEFilterLocation = $iFilterDirName + '\ONIFilter.dll'
-        $PUBFilterLocation = $iFilterDirName + '\PUBFILT.dll'
-        $ONEGuid    ='{B8D12492-CE0F-40AD-83EA-099A03D493F1}'
-        $PUBGuid    ='{A7FD8AC9-7ABF-46FC-B70B-6A5E5EC9859A}'
-        New-Item -Path $KeyParent -Name CLSID -ErrorAction SilentlyContinue -Force| Out-Null
-        New-Item -Path $KeyParent -Name filters -ErrorAction SilentlyContinue -Force | Out-Null
-        New-Item -Path $CLSIDKey -Name $ONEGuid -Value $ONEFilterLocation -Type String -Force| Out-Null
-        New-Item -Path $CLSIDKey -Name $PUBGuid -Value $PUBFilterLocation -Type String -Force| Out-Null
-        New-ItemProperty -Path "$CLSIDKey\$ONEGuid" -Name 'ThreadingModel' -Value 'Both' -Type String -Force| Out-Null
-        New-ItemProperty -Path "$CLSIDKey\$PUBGuid" -Name 'ThreadingModel' -Value 'Both' -Type String -Force| Out-Null
-        New-ItemProperty -Path "$CLSIDKey\$ONEGuid" -Name 'Flags' -Value '1' -Type Dword -Force| Out-Null
-        New-ItemProperty -Path "$CLSIDKey\$PUBGuid" -Name 'Flags' -Value '1' -Type Dword -Force| Out-Null
-        New-Item -Path $FiltersKey -Name '.one' -Value $ONEGuid -Type String -Force| Out-Null
-        New-Item -Path $FiltersKey -Name '.pub' -Value $PUBGuid -Type String -Force| Out-Null
-        $acl = Get-Acl $KeyParent
-        $rule = New-Object System.Security.AccessControl.RegistryAccessRule ('NETWORK SERVICE','ReadKey','Allow')
-        $acl.SetAccessRule($rule)
-        $acl | Set-Acl -Path $KeyParent
-    }
-
     Function DisableSharedCacheServiceProbe {
         # Taken from DisableSharedCacheServiceProbe.ps1
         # Copyright (c) Microsoft Corporation. All rights reserved.
         Write-MyOutput "Applying DisableSharedCacheServiceProbe (KB2971467, 'Shared Cache Service Restart' Probe Fix)"
-        $exchangeInstallPath = get-itemproperty -path HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup -ErrorAction SilentlyContinue
+        $exchangeInstallPath = get-itemproperty -path $EXCHANGEINSTALLKEY -ErrorAction SilentlyContinue
         if ($exchangeInstallPath -ne $null -and (Test-Path $exchangeInstallPath.MsiInstallPath)) {
             $ProbeConfigFile= Join-Path ( $exchangeInstallPath.MsiInstallPath) ('Bin\Monitoring\Config\SharedCacheServiceTest.xml')
 	        if (Test-Path $ProbeConfigFile) {
@@ -1320,7 +1298,7 @@ process {
         # Parts taken from Exchange2013-KB2997355-FixIt.ps1
         # Copyright (c) Microsoft Corporation. All rights reserved.
         Write-MyOutput 'Applying Exchange2013-KB2997355-FixIt (KB2997355, Exchange Online Mailbox Management Fix)'
-        $exchangeInstallPath = get-itemproperty -path HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup -ErrorAction SilentlyContinue
+        $exchangeInstallPath = get-itemproperty -path $EXCHANGEINSTALLKEY -ErrorAction SilentlyContinue
         if ($exchangeInstallPath -ne $null -and (Test-Path $exchangeInstallPath.MsiInstallPath)) {
             $cfgFile = Join-Path (Join-Path $exchangeInstallPath.MsiInstallPath 'ClientAccess\ecp\DDI') 'RemoteDomains.xaml'
 
@@ -1343,9 +1321,9 @@ process {
             0='Unknown';
             $NETVERSION_45='4.5'; $NETVERSION_451='4.5.1'; $NETVERSION_452='4.5.2'; $NETVERSION_452KB31467178='4.5.2 & KB3146717/3146718';
             $NETVERSION_46='4.6'; $NETVERSION_461='4.6.1'; $NETVERSION_462='4.6.2'; $NETVERSION_462WS2016='4.6.2 (WS2016)'; $NETVERSION_47='4.7';
-            $NETVERSION_471='4.7.1';
+            $NETVERSION_471='4.7.1'; $NETVERSION_472='4.7.2'
         }
-        return ($NetVersions.GetEnumerator() | Where {$NetVersion -ge $_.Name} | Sort Name -Descending | Select -First 1).Value
+        return ($NetVersions.GetEnumerator() | Where-Object {$NetVersion -ge $_.Name} | Sort-Object Name -Descending | Select-Object -First 1).Value
     }
 
     Function Get-NETVersion {
@@ -1524,7 +1502,8 @@ process {
         }
 
         $SetupVersion= File-DetectVersion "$($State['SourcePath'])\Setup\ServerRoles\Common\ExSetup.exe"
-        Write-MyOutput "ExSetup version: $(Setup-TextVersion $SetupVersion )"
+	$State['SetupVersionText']= Setup-TextVersion $SetupVersion
+        Write-MyOutput ('ExSetup version: {0}' -f $State['SetupVersionText'])
         If( $SetupVersion) {
             $Num= $SetupVersion.split('.') | ForEach-Object { [string]([int]$_)}
             $MajorSetupVersion= [decimal]($num[0]+ '.'+ $num[1])
@@ -1544,8 +1523,8 @@ process {
         If( $UseWMF3 -and (is-MinimalBuild $SetupVersion $EX2013SETUPEXE_SP1)) {
             Write-MyWarning 'WMF3 is not supported for Exchange Server 2013 SP1 and up'
         }
-        If( $State['NoSetup'] -or $State['Recover']) {
-            Write-MyOutput 'Not checking roles (NoSetup or Recover mode)'
+        If( $State['NoSetup'] -or $State['Recover'] -or $State['Upgrade']) {
+            Write-MyOutput 'Not checking roles (NoSetup, Recover or Upgrade mode)'
         }
         Else {
             Write-MyOutput 'Checking roles to install'
@@ -1555,7 +1534,7 @@ process {
                     Exit $ERR_UNKNOWNROLESSPECIFIED
                 }
                 If ( $State['InstallCAS']) {
-                    Write-MyWarning 'Exchange 2016 setup detected, will ignore deprecated InstallCAS parameter'
+                    Write-MyWarning 'Exchange 2016 setup detected, will ignore InstallCAS switch'
                 }
             }
             Else {
@@ -1571,8 +1550,14 @@ process {
                 Write-MyOutput 'Recovery mode specified, Exchange server object found'
             }
             Else {
-                Write-MyError 'Existing Exchange server object found for this computer, please use the Recover option when you need to recover this Exchange server'
-                Exit $ERR_PROBLEMEXCHANGESERVEREXISTS
+                If( Test-Path $EXCHANGEINSTALLKEY) {
+                    Write-MyOutput 'Existing Exchange server object found in Active Directory, and installation seems present - switching to Upgrade mode'
+                    $State['Upgrade']= $true
+                }
+                Else {
+                    Write-MyError 'Existing Exchange server object found in Active Directory, but installation missing - please use Recover switch to recover a server'
+                    Exit $ERR_PROBLEMEXCHANGESERVEREXISTS
+                }
             }
         }
 
@@ -1584,7 +1569,8 @@ process {
 
         Write-MyOutput 'Checking NIC configuration ..'
         If(! (Get-WmiObject Win32_NetworkAdapterConfiguration -Filter {IPEnabled=True and DHCPEnabled=False})) {
-            Write-MyWarning "System doesn't have a static IP addresses configured"
+            Write-MyError "System doesn't have a static IP addresses configured"
+            Exit $ERR_NOFIXEDIPADDRESS
         }
 
         If ( $State['TargetPath']) {
@@ -1680,6 +1666,10 @@ process {
             }
         }
 
+        If($State["InstallFilterPack"]) {
+            Write-MyWarning 'Ignoring obsolete InstallFilterPack switch'
+        }
+
         If( Get-PSExecutionPolicy) {
             # Referring to http://support.microsoft.com/kb/2810617/en
             Write-MyWarning 'PowerShell Execution Policy is configured through GPO and may prohibit Exchange Setup. Clearing entry.'
@@ -1704,7 +1694,7 @@ process {
 
     Function Configure-HighPerformancePowerPlan {
         Write-MyVerbose 'Configuring Power Plan'
-        $p = Get-CimInstance -Name root\cimv2\power -Class win32_PowerPlan | Where {$_.InstanceID -eq 'Microsoft:PowerPlan\{8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c}'}
+        $p = Get-CimInstance -Name root\cimv2\power -Class win32_PowerPlan | Where-Object {$_.InstanceID -eq 'Microsoft:PowerPlan\{8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c}'}
         $tmp= Invoke-CimMethod -InputObject $p -MethodName Activate
         $CurrentPlan = Get-WmiObject -Namespace root\cimv2\power -Class win32_PowerPlan | Where-Object { $_.IsActive }
         Write-MyOutput "Power Plan active: $($CurrentPlan.ElementName)"
@@ -1714,7 +1704,7 @@ process {
         # http://support.microsoft.com/kb/2740020
         Write-MyVerbose 'Disabling Power Management on Network Adapters'
         # Find physical adapters that are OK and are not disabled
-        $NICs = Get-WmiObject -ClassName Win32_NetworkAdapter | Where { $_.AdapterTypeId -eq 0 -and $_.PhysicalAdapter -and $_.ConfigManagerErrorCode -eq 0 -and $_.ConfigManagerErrorCode -ne 22 }
+        $NICs = Get-WmiObject -ClassName Win32_NetworkAdapter | Where-Object { $_.AdapterTypeId -eq 0 -and $_.PhysicalAdapter -and $_.ConfigManagerErrorCode -eq 0 -and $_.ConfigManagerErrorCode -ne 22 }
         ForEach( $NIC in $NICs) {
                 $PNPDeviceID= ($NIC.PNPDeviceID).ToUpper()
                 $NICPowerMgt = Get-WmiObject MSPower_DeviceEnable -Namespace root\wmi | Where-Object { $_.instancename -match [regex]::escape( $PNPDeviceID) }
@@ -1909,7 +1899,7 @@ process {
     # MAIN
     ########################################
 
-    #Requires -Version 2.0
+    #Requires -Version 3.0
 
     $ScriptFullName = $MyInvocation.MyCommand.Path
     $ScriptName = $ScriptFullName.Split("\")[-1]
@@ -1919,15 +1909,15 @@ process {
 
     # PoSHv2 Workaround
     If( $InstallMultiRole) {
-		$InstallCAS= $true
-		$InstallMailbox= $true
+	$InstallCAS= $true
+	$InstallMailbox= $true
     }
 
     $State=@{}
     $StateFile= "$InstallPath\$($env:computerName)_$($ScriptName)_state.xml"
     $State= Load-State
 
-    Write-Output "Script $ScriptFullName called using $ParameterString"
+    Write-Output "Script $ScriptFullName v$ScriptVersion called using $ParameterString"
     Write-Verbose "Using parameterSet $($PsCmdlet.ParameterSetName)"
     Write-Output "Running on OS build $MajorOSVersion.$MinorOSVersion"
 
@@ -1954,21 +1944,25 @@ process {
         $State["TargetPath"]= $TargetPath
         $State["AutoPilot"]= $AutoPilot
         $State["IncludeFixes"]= $IncludeFixes
-        $State["InstallFilterPack"]= $InstallFilterPack
         $State["NoSetup"]= $NoSetup
         $State["Recover"]= $Recover
+        $State["Upgrade"]= $False
         $State["UseWMF3"]= $UseWMF3
         $State["NoNet461"]= $NoNet461
         $State["NoNet471"]= $NoNet471
         $State["Install461"]= $False
         $State["Install462"]= $False
         $State["Install471"]= $False
+        $State["VCRedist2013"]= $False
         $State["DisableSSL3"]= $DisableSSL3
         $State["DisableRC4"]= $DisableRC4
+        $State["InstallFilterPack"]= $InstallFilterPack
         $State["SCP"]= $SCP
         $State["Lock"]= $Lock
         $State["TranscriptFile"]= "$($State["InstallPath"])\$($env:computerName)_$($ScriptName)_$(Get-Date -format "yyyyMMddHHmmss").log"
+        
         $State["Verbose"]= $VerbosePreference
+
     }
 
     If( $State["Lock"] ) {
@@ -2038,6 +2032,15 @@ process {
                         ($State["MajorSetupVersion"] -eq $EX2013_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2013SETUPEXE_CU16))) {
                         If( ($State["MajorSetupVersion"] -ge $EX2016_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2016SETUPEXE_CU8)) -or
                             ($State["MajorSetupVersion"] -eq $EX2013_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2013SETUPEXE_CU19))) {
+                            If( ($State["MajorSetupVersion"] -ge $EX2016_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2016SETUPEXE_CU10)) -or
+                                ($State["MajorSetupVersion"] -eq $EX2013_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2013SETUPEXE_CU20))) {
+                                If( $State["NoNet471"]) {
+                                    Write-MyWarning "Ignoring NoNet471 switch, .NET Framework 4.7.1 is required for this Exchange build"
+                                    $State["NoNet471"]= $false
+                                }
+                                # Set to install the Ex2016CU10+/Ex2013CU20+ required VC++ 2013 runtime
+                                $State["VCRedist2013"]= $True
+                            }
                             If( $State["NoNet471"]) {
                                 Write-MyOutput ".NET Framework 4.7.1 supported, but NoNet471 specified - will use .NET Framework 4.6.2"
                                 $State["Install462"]= $True
@@ -2090,10 +2093,6 @@ process {
             Write-MyOutput "Installing BITS module"
             Import-Module BITSTransfer
 
-            If( $State["InstallFilterPack"]) {
-                Package-Install "{95140000-2000-0409-1000-0000000FF1CE}" "Microsoft Office 2010 Filter Pack" "FilterPack64bit.exe" "http://download.microsoft.com/download/0/A/2/0A28BBFA-CBFA-4C03-A739-30CCA5E21659/FilterPack64bit.exe" ("/passive", "/norestart")
-                Package-Install "00004159000290400100000000F01FEC\Patches\2B24AAAA46EAEB942BF5566A6B1DE170" "Microsoft Office 2010 Filter Pack SP1" "filterpack2010sp1-kb2460041-x64-fullfile-en-us.exe" "http://download.microsoft.com/download/A/A/3/AA345161-18B8-45AE-8DC8-DA6387264CB9/filterpack2010sp1-kb2460041-x64-fullfile-en-us.exe" ("/passive", "/norestart")
-            }
             If( $State["Install461"] -or $State["Install462"] -or $State['Install471']) {
                 # Check .NET FrameWork 4.7.1 installed
                 If( $State["Install471"]) {
@@ -2200,6 +2199,7 @@ process {
                 }
             }
 
+            # OS specific hotfixes
             Switch( $MajorOSVersion) {
                 $WS2012_MAJOR {
                     Package-Install "KB2985459" "The W3wp.exe process has high CPU usage when you run PowerShell commands for Exchange" "Windows8-RT-KB2985459-x64.msu|477081_intl_x64_zip.exe" "http://hotfixv4.microsoft.com/Windows%208/Windows%20Server%202012%20RTM/nosp/Fix512067/9200/free/477081_intl_x64_zip.exe" ("/quiet", "/norestart")
@@ -2230,6 +2230,11 @@ process {
                     Package-Install "KB3206632" "Cumulative Update for Windows Server 2016 for x64-based Systems" "windows10.0-kb3206632-x64_b2e20b7e1aa65288007de21e88cd21c3ffb05110.msu" "http://download.windowsupdate.com/d/msdownload/update/software/secu/2016/12/windows10.0-kb3206632-x64_b2e20b7e1aa65288007de21e88cd21c3ffb05110.msu" ("/quiet", "/norestart")
                     break
                 }
+            }
+
+            # Check if need to install VC++ Runtime 2013
+            If ( $State["VCRedist2013"] ) {
+                Package-Install "{A749D8E6-B613-3BE3-8F5F-045C84EBA29B}" "Visual C++ 2013 Redistributable" "vcredist_x64.exe" "https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91DA-3737CD5CD6E3/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
             }
         }
 
@@ -2290,10 +2295,7 @@ process {
             #Load-ExchangeModule
 
             If( $State["InstallMailbox"] ) {
-                If ( $State["InstallFilterPack"]) {
-                    Enable-IFilters
-                }
-                # Insert other Mailbox Server specifics here
+                # Insert Mailbox Server specifics here
             }
  		    If( $State["InstallCAS"]) {
                 # Insert Client Access Server specifics here
@@ -2348,13 +2350,15 @@ process {
                 Write-MyOutput "Configuring MSExchangeFrontEndTransport startup to Automatic"
                 Set-Service MSExchangeFrontEndTransport -StartupType Automatic
             }
+
             Enable-UAC
             Enable-IEESC
             Write-MyOutput "Setup finished - We're good to go."
         }
 
         default {
-            Write-MyError "Unknown phase ($($State["InstallPhase"]) of $MAX_PHASE)"
+            Write-MyError "Unknown phase ($($State["InstallPhase"]))"
+            Exit $ERR_UNEXPTECTEDPHASE
         }
       }
     }
