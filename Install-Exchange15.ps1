@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 2.99.3, July 11th, 2018
+    Version 2.99.2, July 11th, 2018
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius,
     Bobby West, Pavel Andreev and everyone else who provided feedback or contributed in other ways.
@@ -521,7 +521,7 @@ process {
     $NETVERSION_471                 = 461310
     $NETVERSION_472                 = 461814
 
-    $ScriptVersion                  = '2.99.3'
+    $ScriptVersion                  = '2.99.2'
 
     Function Save-State( $State) {
         Write-MyVerbose "Saving state information to $StateFile"
