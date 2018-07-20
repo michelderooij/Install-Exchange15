@@ -188,7 +188,7 @@
     2.991   Fixed .NET blockade removal
             Fixed upgrade detection
             Minor bugs and cosmetics fixes
-    2.99.2  Fixed Recover Mode Phase 
+    2.99.2  Fixed Recover Mode Phase
             Fixed InstallMDBDBPath location check
             Added support for for Exchange 2016 CU10
             Added support for for Exchange 2013 CU21
@@ -198,6 +198,8 @@
             Changed script to abort on non-static IP presence
             Removed InstallFilterPack switch (obsolete)
             Code cleanup and cosmetics
+    Unreleased
+            Added NoSchemaAdmins and NoEnterpriseAdmins parameters
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -245,6 +247,12 @@
     .PARAMETER Credentials
     Specifies credentials to use for automatic logon. Use DOMAIN\User or user@domain. When
     not specified, you will be prompted to enter credentials.
+
+    .PARAMETER NoSchemaAdmins
+    Prevents checking for Schema Admins rights
+
+    .PARAMETER NoEnterpriseAdmins
+    Prevents checking for Enterprise Admins rights
 
     .PARAMETER IncludeFixes
     Depending on operating system and detected Exchange version to install, will download
@@ -357,7 +365,9 @@ param(
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
-	        [System.Management.Automation.PsCredential]$Credentials,
+        [System.Management.Automation.PsCredential]$Credentials,
+        [switch]$NoSchemaAdmins,
+        [switch]$NoEnterpriseAdmins,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
@@ -1447,20 +1457,24 @@ process {
             }
         }
 
-        If(! ( Test-SchemaAdmin)) {
-            Write-MyError 'Current user is not member of Schema Administrators'
-            Exit $ERR_RUNNINGNONSCHEMAADMIN
-        }
-        Else {
-            Write-MyOutput 'User is member of Schema Administrators'
+        If(! $State["NoSchemaAdmins"]) {
+            If(! ( Test-SchemaAdmin)) {
+                Write-MyError 'Current user is not member of Schema Administrators'
+                Exit $ERR_RUNNINGNONSCHEMAADMIN
+            }
+            Else {
+                Write-MyOutput 'User is member of Schema Administrators'
+            }
         }
 
-        If(! ( Test-EnterpriseAdmin)) {
-            Write-MyError 'User is not member of Enterprise Administrators'
-            Exit $ERR_RUNNINGNONENTERPRISEADMIN
-        }
-        Else {
-            Write-MyOutput 'User is member of Enterprise Administrators'
+        If(! $State["NoEnterpriseAdmins"]) {
+            If(! ( Test-EnterpriseAdmin)) {
+                Write-MyError 'User is not member of Enterprise Administrators'
+                Exit $ERR_RUNNINGNONENTERPRISEADMIN
+            }
+            Else {
+                Write-MyOutput 'User is member of Enterprise Administrators'
+            }
         }
 
         $ADSite= Get-ADSite
@@ -1939,6 +1953,8 @@ process {
         $State["OrganizationName"]= $Organization
         $State["AdminAccount"]= $Credentials.UserName
         $State["AdminPassword"]= ($Credentials.Password | ConvertFrom-SecureString -ErrorAction SilentlyContinue)
+        $State["NoSchemaAdmins"]= $NoSchemaAdmins
+        $State["NoEnterpriseAdmins"]= $NoEnterpriseAdmins
         $State["SourcePath"]= $SourcePath
         $State["SetupVersion"]= ( File-DetectVersion "$($State["SourcePath"])\setup.exe")
         $State["TargetPath"]= $TargetPath
@@ -1960,7 +1976,7 @@ process {
         $State["SCP"]= $SCP
         $State["Lock"]= $Lock
         $State["TranscriptFile"]= "$($State["InstallPath"])\$($env:computerName)_$($ScriptName)_$(Get-Date -format "yyyyMMddHHmmss").log"
-        
+
         $State["Verbose"]= $VerbosePreference
 
     }
