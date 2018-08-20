@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 2.99.2, July 11th, 2018
+    Version 2.99.5, August 20th, 2018
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius,
     Bobby West, Pavel Andreev and everyone else who provided feedback or contributed in other ways.
@@ -26,15 +26,12 @@
 
     .NOTES
     Requirements:
-    - Windows Server 2008 R2 SP1, Windows Server 2012, Windows Server 2012 R2 or
-      Windows Server 2016 (Exchange 2016 CU3+ only).
-    - Domain-joined system.
-    - "AutoPilot" mode requires account with elevated administrator privileges.
-    - When you let the script prepare AD, the account needs proper permissions.
-    - Edge role not yet supported.
+    - Windows Server 2008 R2 SP1, Windows Server 2012, Windows Server 2012 R2,
+      Windows Server 2016 (Exchange 2016 CU3+ only), or Windows Server 2019 Preview (Exchange 2019 Preview)
+    - Edge role not supported.
 
-    Revision History
-    --------------------------------------------------------------------------------
+    .REVISIONS
+
     1.0     Initial community release
     1.01    Added logic to prepare AD when organization present
             Fixed checks and logic to prepare AD
@@ -198,6 +195,12 @@
             Changed script to abort on non-static IP presence
             Removed InstallFilterPack switch (obsolete)
             Code cleanup and cosmetics
+    2.99.3  Fixed TargetPath-Recover parameter mutual exclusion
+    2.99.4  Fixed Recover mode not adding /InstallWindowsComponents
+            Added SkipRolesCheck switch
+            Added Exchange 2019 Public Preview support
+    2.99.5  Added setting desktop background during setup
+            Some code cleanup
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -249,6 +252,9 @@
     .PARAMETER IncludeFixes
     Depending on operating system and detected Exchange version to install, will download
     and install additional recommended Exchange hotfixes.
+
+    .PARAMETER SkipRolesCheck
+    Instructs script not to check for Schema Admin and Enterprise Admin roles.
 
     .PARAMETER UseWMF3
     Installs WMF3 instead of WMF4 for Exchange 2013 SP1 or later.
@@ -407,15 +413,21 @@ param(
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
+                [Switch]$SkipRolesCheck,
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
+ 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='AutoPilot')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
                 [ValidateRange(0,6)]
-	        [int]$Phase,
-        [parameter( Mandatory= $false)]
-                [switch]$InstallFilterPack
+	        [int]$Phase
 )
 
 process {
+
+    $ScriptVersion                  = '2.99.5'
 
     $ERR_OK                         = 0
     $ERR_PROBLEMADPREPARE	    = 1001
@@ -462,6 +474,7 @@ process {
     # Exchange Versions
     $EX2013_MAJOR                   = '15.0'
     $EX2016_MAJOR                   = '15.1'
+    $EX2019_MAJOR                   = '15.2'
 
     # Exchange Install registry key
     $EXCHANGEINSTALLKEY             = "HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup"
@@ -501,12 +514,14 @@ process {
     $EX2016SETUPEXE_CU8             = '15.01.1415.002'
     $EX2016SETUPEXE_CU9             = '15.01.1466.003'
     $EX2016SETUPEXE_CU10            = '15.01.1531.003'
+    $EX2019SETUPEXE_PRE             = '15.02.0196.000'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
     $WS2012_MAJOR                   = '6.2'
     $WS2012R2_MAJOR                 = '6.3'
     $WS2016_MAJOR                   = '10.0'
+    $WS2019_PRE                     = '10.0.17709.1000'
 
     # .NET Framework Versions
     $NETVERSION_45                  = 378389
@@ -520,8 +535,6 @@ process {
     $NETVERSION_47                  = 460798
     $NETVERSION_471                 = 461310
     $NETVERSION_472                 = 461814
-
-    $ScriptVersion                  = '2.99.2'
 
     Function Save-State( $State) {
         Write-MyVerbose "Saving state information to $StateFile"
@@ -577,6 +590,7 @@ process {
         $EX2016SETUPEXE_CU8= 'Exchange Server 2016 Cumulative Update 8';
         $EX2016SETUPEXE_CU9= 'Exchange Server 2016 Cumulative Update 9';
         $EX2016SETUPEXE_CU10= 'Exchange Server 2016 Cumulative Update 10';
+        $EX2019SETUPEXE_PRE= 'Exchange Server 2019 Public Preview';
       }
       if ($Versions[$FileVersion]) {
         $res= "$($Versions[$FileVersion]) (build $FileVersion)"
@@ -998,7 +1012,7 @@ process {
         }
         If( $State['Recover']) {
             Write-MyOutput 'Wil run Setup in recover mode'
-            $Params= '/mode:RecoverServer', '/IAcceptExchangeServerLicenseTerms', '/DoNotStartTransport'
+            $Params= '/mode:RecoverServer', '/IAcceptExchangeServerLicenseTerms', '/DoNotStartTransport', '/InstallWindowsComponents'
             If( $State['TargetPath']) {
                 $Params+= "/TargetDir:`"$($State['TargetPath'])`""
             }
@@ -1360,6 +1374,149 @@ process {
         }
     }
 
+    Function Load-WallpaperAssemblies {
+        # Try load assemblies for configuring wallpaper
+        [system.reflection.assembly]::loadWithPartialName('system.windows.forms') | Out-Null
+        [system.reflection.assembly]::loadWithPartialName('system.drawing.imaging') | Out-Null
+        Try {
+            [System.Windows.Forms.Screen]::AllScreens | Out-Null
+
+            Write-Verbose 'Loaded assemblies for configuring wallpaper'
+            $res= $true
+        }
+        Catch {
+            Write-Warning 'Problem loading assemblies for configuring wallpaper'
+            $res= $true
+        }
+        return $res
+    }
+
+    Function Set-Wallpaper {
+        Param(
+            [Parameter(Mandatory=$true)]
+            $Path,
+         
+            [ValidateSet('Center','Stretch','Fill','Tile','Fit')]
+            $Style
+        )
+        Try {
+            if (-not ([System.Management.Automation.PSTypeName]'Wallpaper.Setter').Type) {
+                Add-Type -TypeDefinition @"
+                using System;
+                using System.Runtime.InteropServices;
+                using Microsoft.Win32;
+                namespace Wallpaper {
+                    public enum Style : int {
+                        Center, Stretch, Fill, Fit, Tile
+                    }
+                    public class Setter {
+                        public const int SetDesktopWallpaper = 20;
+                        public const int UpdateIniFile = 0x01;
+                        public const int SendWinIniChange = 0x02;
+                        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+                        private static extern int SystemParametersInfo (int uAction, int uParam, string lpvParam, int fuWinIni);
+                        public static void SetWallpaper ( string path, Wallpaper.Style style ) {
+                            SystemParametersInfo( SetDesktopWallpaper, 0, path, UpdateIniFile | SendWinIniChange );
+                            RegistryKey key = Registry.CurrentUser.OpenSubKey("Control Panel\\Desktop", true);
+                            switch( style ) {
+                                case Style.Tile :
+                                    key.SetValue(@"WallpaperStyle", "0") ; 
+                                    key.SetValue(@"TileWallpaper", "1") ; 
+                                    break;
+                                case Style.Center :
+                                    key.SetValue(@"WallpaperStyle", "0") ; 
+                                    key.SetValue(@"TileWallpaper", "0") ; 
+                                    break;
+                                case Style.Stretch :
+                                    key.SetValue(@"WallpaperStyle", "2") ; 
+                                    key.SetValue(@"TileWallpaper", "0") ;
+                                    break;
+                                case Style.Fill :
+                                    key.SetValue(@"WallpaperStyle", "10") ; 
+                                    key.SetValue(@"TileWallpaper", "0") ; 
+                                    break;
+                                case Style.Fit :
+                                    key.SetValue(@"WallpaperStyle", "6") ; 
+                                    key.SetValue(@"TileWallpaper", "0") ; 
+                                    break;
+    }
+                            key.Close();
+                        }
+                    }
+                }
+"@ -ErrorAction Stop 
+                } 
+            } 
+            Catch {
+                Write-MyWarning -Message "Wallpaper not changed because $($_.Exception.Message)"
+            }
+        [Wallpaper.Setter]::SetWallpaper( $Path, $Style )
+    }
+
+    Function Get-Wallpaper {
+	    $ret= @{}
+	    $res= Get-ItemProperty -Path 'HKCU:\control panel\desktop' -ErrorAction SilentlyContinue
+	    $ret['Wallpaper']= $res.Wallpaper
+	    $ret['Style']= 'Center'
+	    If( $res.WallpaperStyle -eq 6 -and $res.TileWallpaper -eq 0) {
+		    $ret['Style']= 'Fit'
+	    }
+	    If( $res.WallpaperStyle -eq 0 -and $res.TileWallpaper -eq 1) {
+		    $ret['Style']= 'Tile'
+	    }
+	    If( $res.WallpaperStyle -eq 2 -and $res.TileWallpaper -eq 0) {
+		    $ret['Style']= 'Stretch'
+	    }
+	    If( $res.WallpaperStyle -eq 10 -and $res.TileWallpaper -eq 0) {
+		    $ret['Style']= 'Fill'
+	    }
+	    If( $res.WallpaperStyle -eq 6 -and $res.TileWallpaper -eq 0) {
+		    $ret['Style']= 'Fit'
+	    }
+
+	    Return $ret
+    }
+
+    Function Set-DesktopWatermark {
+        Param(
+            [Parameter(Mandatory=$false)]
+            $BmpPath= $ENV:TEMP,
+            [Parameter(Mandatory=$false)]
+            $BG= @(1, 36, 86),
+            [Parameter(Mandatory=$false)]
+            [string]$Text= '',
+            [Parameter(Mandatory=$false)]
+            $FG= @(250, 250, 250),
+            [Parameter(Mandatory=$false)]
+            [string]$Font= 'System',
+            [Parameter(Mandatory=$false)]
+            [string]$FontSize= 12,
+            [ValidateSet('Center','Stretch','Fill','Tile','Fit')]
+            $Style= 'Center'
+        )
+
+        $SR = [System.Windows.Forms.Screen]::AllScreens | Where-Object {$_.Primary} | Select-Object -ExpandProperty Bounds
+        $bmp = New-Object system.drawing.bitmap( $SR.Width, $SR.Height)
+        $image = [System.Drawing.Graphics]::FromImage( $bmp)
+        $image.FillRectangle( (New-Object Drawing.SolidBrush ([System.Drawing.Color]::FromArgb( $BG[0], $BG[1], $BG[2]))), (New-Object system.drawing.rectanglef( 0, 0, ($SR.Width), ($SR.Height))))
+
+        $BmpFile= Join-Path -Path $BmpPath -ChildPath 'bg.bmp'
+        $font1 = New-Object System.Drawing.Font( $Font, $FontSize, [System.Drawing.FontStyle]::Regular)
+        $sFormat = New-Object system.drawing.stringformat
+        $sFormat.Alignment = [system.drawing.StringAlignment]::Center
+        $brush1 = New-Object Drawing.SolidBrush ( [System.Drawing.Color]::FromArgb( $FG[0], $FG[1], $FG[2]))
+        $sz1 = [system.windows.forms.textrenderer]::MeasureText( $text, $font1)
+        $rect1 = New-Object System.Drawing.RectangleF (0, ($sz1.Height), $SR.Width, $SR.Height)
+        $image.DrawString( $text, $font1, $brush1, $rect1, $sFormat)
+        Try {
+            $bmp.Save( (Join-Path -Path $BmpPath -ChildPath 'bg.bmp'), [system.drawing.imaging.imageformat]::Bmp)
+        }
+        Catch {
+
+        }
+        Set-Wallpaper -Path $BmpFile -Style $Style
+    }
+
     Function Start-7318DrainNGenQueue {
         Write-MyOutput 'Optimizing .NET Framework (7318.DrainNGenQueue)'
         $NetPath64= (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Client' -ErrorAction SilentlyContinue).InstallPath
@@ -1447,20 +1604,25 @@ process {
             }
         }
 
-        If(! ( Test-SchemaAdmin)) {
-            Write-MyError 'Current user is not member of Schema Administrators'
-            Exit $ERR_RUNNINGNONSCHEMAADMIN
+	If( $State["SkipRolesCheck"]) {
+                Write-MyOutput 'SkipRolesCheck: Skipping validation of Schema & Enterprise Administrators membership'
         }
         Else {
-            Write-MyOutput 'User is member of Schema Administrators'
-        }
+            If(! ( Test-SchemaAdmin)) {
+                Write-MyError 'Current user is not member of Schema Administrators'
+                Exit $ERR_RUNNINGNONSCHEMAADMIN
+            }
+            Else {
+                Write-MyOutput 'User is member of Schema Administrators'
+            }
 
-        If(! ( Test-EnterpriseAdmin)) {
-            Write-MyError 'User is not member of Enterprise Administrators'
-            Exit $ERR_RUNNINGNONENTERPRISEADMIN
-        }
-        Else {
-            Write-MyOutput 'User is member of Enterprise Administrators'
+            If(! ( Test-EnterpriseAdmin)) {
+                Write-MyError 'User is not member of Enterprise Administrators'
+                Exit $ERR_RUNNINGNONENTERPRISEADMIN
+            }
+            Else {
+                Write-MyOutput 'User is member of Enterprise Administrators'
+            }
         }
 
         $ADSite= Get-ADSite
@@ -1493,16 +1655,16 @@ process {
         }
 
         Write-MyOutput 'Checking if we can access Exchange setup ..'
-        If(! (Test-Path "$($State['SourcePath'])\setup.exe")) {
+        If(! (Test-Path "$($State['SourcePath'])setup.exe")) {
             Write-MyError "Can't find Exchange setup at $($State['SourcePath'])"
             Exit $ERR_MISSINGEXCHANGESETUP
         }
         Else {
-            Write-MyOutput "Exchange setup located at $($State['SourcePath'])\setup.exe"
+            Write-MyOutput "Exchange setup located at $($State['SourcePath'])setup.exe"
         }
 
         $SetupVersion= File-DetectVersion "$($State['SourcePath'])\Setup\ServerRoles\Common\ExSetup.exe"
-	$State['SetupVersionText']= Setup-TextVersion $SetupVersion
+	    $State['SetupVersionText']= Setup-TextVersion $SetupVersion
         Write-MyOutput ('ExSetup version: {0}' -f $State['SetupVersionText'])
         If( $SetupVersion) {
             $Num= $SetupVersion.split('.') | ForEach-Object { [string]([int]$_)}
@@ -1664,10 +1826,6 @@ process {
             Else {
                 Write-MyOutput 'Forest Functional Level is 2003 or later'
             }
-        }
-
-        If($State["InstallFilterPack"]) {
-            Write-MyWarning 'Ignoring obsolete InstallFilterPack switch'
         }
 
         If( Get-PSExecutionPolicy) {
@@ -1921,6 +2079,8 @@ process {
     Write-Verbose "Using parameterSet $($PsCmdlet.ParameterSetName)"
     Write-Output "Running on OS build $MajorOSVersion.$MinorOSVersion"
 
+    $WPAssembliesLoaded= Load-WallpaperAssemblies
+
     If(! $State.Count) {
         # No state, initialize settings from parameters
         If( $($PsCmdlet.ParameterSetName) -eq "AutoPilot") {
@@ -1956,11 +2116,20 @@ process {
         $State["VCRedist2013"]= $False
         $State["DisableSSL3"]= $DisableSSL3
         $State["DisableRC4"]= $DisableRC4
-        $State["InstallFilterPack"]= $InstallFilterPack
+        $State["SkipRolesCheck"]= $SkipRolesCheck
         $State["SCP"]= $SCP
         $State["Lock"]= $Lock
         $State["TranscriptFile"]= "$($State["InstallPath"])\$($env:computerName)_$($ScriptName)_$(Get-Date -format "yyyyMMddHHmmss").log"
         
+        If( $WPAssembliesLoaded) {
+            $temp= Get-WallPaper
+            $State['Wallpaper']= $temp.Wallpaper
+            $State['WallpaperStyle']= $temp.Style
+        }
+        Else {
+            $State['Wallpaper']= $null
+        }
+
         $State["Verbose"]= $VerbosePreference
 
     }
@@ -2022,6 +2191,10 @@ process {
     Else {
 
       Write-MyVerbose "Current phase is $($State["InstallPhase"]) of $MAX_PHASE"
+      If( $WPAssembliesLoaded) {
+        Set-DesktopWatermark -Text ('Setup {0}, phase {1}' -f $State['SetupVersionText'], $State['InstallPhase'])
+      }
+
       Switch ($State["InstallPhase"]) {
         1 {
 
@@ -2349,6 +2522,11 @@ process {
             If( Get-Service MSExchangeFrontEndTransport -ErrorAction SilentlyContinue) {
                 Write-MyOutput "Configuring MSExchangeFrontEndTransport startup to Automatic"
                 Set-Service MSExchangeFrontEndTransport -StartupType Automatic
+            }
+
+            If( $WPAssembliesLoaded -and $State['Wallpaper']) {
+                Write-MyVerbose 'Restoring wallpaper configuration'
+                Set-WallPaper -Path $State['Wallpaper'] -Style $State['WallpaperStyle']
             }
 
             Enable-UAC
