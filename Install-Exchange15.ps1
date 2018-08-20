@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 2.99.5, August 20th, 2018
+    Version 2.99.6, August 20th, 2018
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius,
     Bobby West, Pavel Andreev and everyone else who provided feedback or contributed in other ways.
@@ -201,6 +201,7 @@
             Added Exchange 2019 Public Preview support
     2.99.5  Added setting desktop background during setup
             Some code cleanup
+    2.99.6  Added Windows Server 2019 Preview support (desktop & core)
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -427,7 +428,7 @@ param(
 
 process {
 
-    $ScriptVersion                  = '2.99.5'
+    $ScriptVersion                  = '2.99.6'
 
     $ERR_OK                         = 0
     $ERR_PROBLEMADPREPARE	    = 1001
@@ -521,7 +522,7 @@ process {
     $WS2012_MAJOR                   = '6.2'
     $WS2012R2_MAJOR                 = '6.3'
     $WS2016_MAJOR                   = '10.0'
-    $WS2019_PRE                     = '10.0.17709.1000'
+    $WS2019_PREFULL                 = '10.0.17709'
 
     # .NET Framework Versions
     $NETVERSION_45                  = 378389
@@ -705,9 +706,17 @@ process {
         return [Security.Principal.WindowsIdentity]::GetCurrent().Groups | Where-Object {$_.Value -eq "$SID-519"}
     }
 
-    Function is-MinimalBuild() {
+    Function is-MinimalBuild {
         Param ( [String]$BuildNumber, [String]$ReferenceBuildNumber)
         Return ([System.Version]$BuildNumber -ge [System.Version]$ReferenceBuildNumber)
+    }
+
+    Function is-ServerCore {
+        $res= $false
+        If(( Get-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows NT\CurrentVersion' -Name 'InstallationType' -ErrorAction SilentlyContinue).InstallationType -eq 'Server Core') {
+            $res= $True
+        }
+        Return $res
     }
 
     Function is-RebootPending {
@@ -742,18 +751,26 @@ process {
         Write-MyOutput 'Disabling IE Enhanced Security Configuration'
         $AdminKey = 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}'
         $UserKey = 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}'
-        Set-ItemProperty -Path $AdminKey -Name 'IsInstalled' -Value 0
-        Set-ItemProperty -Path $UserKey -Name 'IsInstalled' -Value 0
-        Stop-Process -Name Explorer
+        New-Item -Path (Split-Path $AdminKey -Parent) -Name (Split-Path $AdminKey -Leaf) -ErrorAction SilentlyContinue | out-null
+        Set-ItemProperty -Path $AdminKey -Name 'IsInstalled' -Value 0 -Force | Out-Null
+        New-Item -Path (Split-Path $UserKey -Parent) -Name (Split-Path $UserKey -Leaf) -ErrorAction SilentlyContinue | out-null
+        Set-ItemProperty -Path $UserKey -Name 'IsInstalled' -Value 0 -Force | Out-Null
+        If( Get-Process -Name explorer.exe -ErrorAction SilentlyContinue) {
+            Stop-Process -Name Explorer
+        }
     }
 
     Function Enable-IEESC {
         Write-MyVerbose 'Enabling IE Enhanced Security Configuration'
         $AdminKey = 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}'
         $UserKey = 'HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}'
-        Set-ItemProperty -Path $AdminKey -Name 'IsInstalled' -Value 1
-        Set-ItemProperty -Path $UserKey -Name 'IsInstalled' -Value 1
-        Stop-Process -Name Explorer
+        New-Item -Path (Split-Path $AdminKey -Parent) -Name (Split-Path $AdminKey -Leaf) -ErrorAction SilentlyContinue | out-null
+        Set-ItemProperty -Path $AdminKey -Name 'IsInstalled' -Value 1 -Force | Out-Null
+        New-Item -Path (Split-Path $UserKey -Parent) -Name (Split-Path $UserKey -Leaf) -ErrorAction SilentlyContinue | out-null
+        Set-ItemProperty -Path $UserKey -Name 'IsInstalled' -Value 1 -Force | Out-Null
+        If( Get-Process -Name explorer.exe -ErrorAction SilentlyContinue) {
+            Stop-Process -Name Explorer
+        }
     }
 
     Function get-FullDomainAccount {
@@ -1122,6 +1139,9 @@ process {
             }
             $WS2016_MAJOR {
                 $Feats= ('RSAT-ADDS', 'Bits', 'RSAT-Clustering-CmdInterface')
+                If( (is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL) -and (is-ServerCore) ) {
+			$Feats+= 'Server-Media-Foundation'
+		}
                 break
             }
             default {
@@ -1163,44 +1183,46 @@ process {
     }
 
     Function Package-Install () {
-        Param ( [String]$PackageID, [string]$Package, [String]$FileName, [String]$OnlineURL, [array]$Arguments)
+        Param ( [String]$PackageID, [string]$Package, [String]$FileName, [String]$OnlineURL, [array]$Arguments, [switch]$NoDownload)
 
         Write-MyOutput "Processing $Package ($PackageID)"
         $PresenceKey= Package-IsInstalled $PackageID
+        $RunFrom= $State['InstallPath']
         If( !( $PresenceKey )){
 
             If( $FileName.contains('|')) {
-
                 # Filename contains filename (dl) and package name (after extraction)
                 $PackageFile= ($FileName.Split('|'))[1]
                 $FileName= ($FileName.Split('|'))[0]
-                If( !( Check-Package $Package '' $FileName $State['InstallPath'])) {
-
+                If( !( Check-Package $Package '' $FileName $RunFrom)) {
                     # Download & Extract
-                    If( !( Check-Package $Package $OnlineURL $PackageFile $State['InstallPath'])) {
+                    If( !( Check-Package $Package $OnlineURL $PackageFile $RunFrom)) {
                         Write-MyError "Problem downloading/accessing $Package"
                         Exit $ERR_PROBLEMPACKAGEDL
                     }
                     Write-MyOutput "Extracting Hotfix Package $Package"
-                    StartWait-Extract $State['InstallPath'] $PackageFile
+                    StartWait-Extract $RunFrom $PackageFile
 
-                    If( !( Check-Package $Package $OnlineURL $PackageFile $State['InstallPath'])) {
+                    If( !( Check-Package $Package $OnlineURL $PackageFile $RunFrom)) {
                         Write-MyError "Problem downloading/accessing $Package"
                         Exit $ERR_PROBLEMPACKAGEEXTRACT
                     }
                 }
-                Write-MyOutput "Installing $Package"
-                $rval= StartWait-Process $State['InstallPath'] $FileName $Arguments
-
             }
             Else {
-
-                If( !( Check-Package $Package $OnlineURL $FileName $State['InstallPath'])) {
+                If( $NoDownload) {
+                    $RunFrom= Split-Path -Path $OnlineURL -Parent
+                    Write-MyVerbose "Will run $FileName straight from $RunFrom"
+                }
+                If( !( Check-Package $Package $OnlineURL $FileName $RunFrom)) {
                     Write-MyError "Problem downloading/accessing $Package"
                     Exit $ERR_PROBLEMPACKAGEDL
                 }
-                $rval= StartWait-Process $State['InstallPath'] $FileName $Arguments
             }
+
+            Write-MyOutput "Installing $Package from $RunFrom"
+            $rval= StartWait-Process $RunFrom $FileName $Arguments
+
             If( ( @(3010,-2145124329) -contains $rval) -or (Package-IsInstalled $PackageID))  {
                 switch ( $rval) {
                     3010: {
@@ -1562,13 +1584,14 @@ process {
             Exit $ERR_CANTCREATETEMPFOLDER
         }
 
-        If( ($MajorOSVersion -eq $WS2012R2_MAJOR) -or ($MajorOSVersion -eq $WS2012_MAJOR) -or ($MajorOSVersion -eq $WS2008R2_MAJOR -and $MinorOSVersion -ge 7601) -or ($MajorOSVersion -eq $WS2016_MAJOR )) {
+        If( ($MajorOSVersion -eq $WS2012R2_MAJOR) -or ($MajorOSVersion -eq $WS2012_MAJOR) -or ($MajorOSVersion -eq $WS2008R2_MAJOR -and $MinorOSVersion -ge 7601) -or ($MajorOSVersion -eq $WS2016_MAJOR ) -or ($MajorOSVersion -eq $WS2019_MAJOR ) ) {
             Write-MyOutput "Operating System is $($MajorOSVersion).$($MinorOSVersion)"
         }
         Else {
-            Write-MyError 'The following Operating Systems are supported: Windows Server 2008 R2 SP1+, Windows Server 2012, Windows Server 2012 R2 or Windows Server 2016 (Exchange 2016 CU3 or later only)'
+            Write-MyError 'The following Operating Systems are supported: Windows Server 2008 R2 SP1+, Windows Server 2012, Windows Server 2012 R2, Windows Server 2016 (Exchange 2016 CU3 or later only) or Windows Server 2019 Preview (Exchange 2019 Preview only)'
             Exit $ERR_UNEXPECTEDOS
         }
+        Write-MyOutput ('Server core mode: {0}' -f (is-ServerCore))
 
         $NetVersion= Get-NETVersion
         $NetVersionText= Get-NetVersionText $NetVersion
@@ -2064,6 +2087,7 @@ process {
     $ParameterString= $PSBoundParameters.getEnumerator() -join " "
     $MajorOSVersion= [string](Get-WmiObject Win32_OperatingSystem | Select-Object @{n="Major";e={($_.Version.Split(".")[0]+"."+$_.Version.Split(".")[1])}}).Major
     $MinorOSVersion= [string](Get-WmiObject Win32_OperatingSystem | Select-Object @{n="Minor";e={($_.Version.Split(".")[2])}}).Minor
+    $FullOSVersion= ('{0}.{1}' -f $MajorOSVersion, $MinorOSVersion)
 
     # PoSHv2 Workaround
     If( $InstallMultiRole) {
@@ -2077,7 +2101,7 @@ process {
 
     Write-Output "Script $ScriptFullName v$ScriptVersion called using $ParameterString"
     Write-Verbose "Using parameterSet $($PsCmdlet.ParameterSetName)"
-    Write-Output "Running on OS build $MajorOSVersion.$MinorOSVersion"
+    Write-Output ('Running on OS build {0}' -f $FullOSVersion)
 
     $WPAssembliesLoaded= Load-WallpaperAssemblies
 
@@ -2400,8 +2424,11 @@ process {
                     break
                 }
                 $WS2016_MAJOR {
-                    Package-Install "KB3206632" "Cumulative Update for Windows Server 2016 for x64-based Systems" "windows10.0-kb3206632-x64_b2e20b7e1aa65288007de21e88cd21c3ffb05110.msu" "http://download.windowsupdate.com/d/msdownload/update/software/secu/2016/12/windows10.0-kb3206632-x64_b2e20b7e1aa65288007de21e88cd21c3ffb05110.msu" ("/quiet", "/norestart")
-                    break
+                    # To prevent installation on WS2019
+                    If( is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL) {
+                        Package-Install "KB3206632" "Cumulative Update for Windows Server 2016 for x64-based Systems" "windows10.0-kb3206632-x64_b2e20b7e1aa65288007de21e88cd21c3ffb05110.msu" "http://download.windowsupdate.com/d/msdownload/update/software/secu/2016/12/windows10.0-kb3206632-x64_b2e20b7e1aa65288007de21e88cd21c3ffb05110.msu" ("/quiet", "/norestart")
+                        break
+                    }
                 }
             }
 
@@ -2413,8 +2440,12 @@ process {
 
         3 {
             Write-MyOutput "Installing Exchange prerequisites (continued)"
-            Package-Install "{41D635FE-4F9D-47F7-8230-9B29D6D42D31}" "Unified Communications Managed API 4.0 Runtime" "UcmaRuntimeSetup.exe" "http://download.microsoft.com/download/2/C/4/2C47A5C1-A1F3-4843-B9FE-84C0032C61EC/UcmaRuntimeSetup.exe" ("/passive", "/norestart")
-
+            If( (is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL) -and (is-ServerCore) ) {
+                Package-Install "{41D635FE-4F9D-47F7-8230-9B29D6D42D31}" "Unified Communications Managed API 4.0 Runtime (Core)" "Setup.exe" (Join-Path -Path $State['SourcePath'] -ChildPath 'UcmaRedist\Setup.exe') ("/passive", "/norestart") -NoDownload
+            }
+            Else {
+                Package-Install "{41D635FE-4F9D-47F7-8230-9B29D6D42D31}" "Unified Communications Managed API 4.0 Runtime" "UcmaRuntimeSetup.exe" "http://download.microsoft.com/download/2/C/4/2C47A5C1-A1F3-4843-B9FE-84C0032C61EC/UcmaRuntimeSetup.exe" ("/passive", "/norestart")
+            }
             If ($State["OrganizationName"]) {
                 Write-MyOutput "Checking/Preparing Active Directory"
                 Prepare-Exchange
