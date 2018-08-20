@@ -198,10 +198,10 @@
     2.99.3  Fixed TargetPath-Recover parameter mutual exclusion
     2.99.4  Fixed Recover mode not adding /InstallWindowsComponents
             Added SkipRolesCheck switch
-            Added Exchange 2019 Public Preview support
+            Added Exchange 2019 Public Preview support on Windows Server 2016
     2.99.5  Added setting desktop background during setup
             Some code cleanup
-    2.99.6  Added Windows Server 2019 Preview support (desktop & core)
+    2.99.6  Added Exchange 2019 Preview on Windows Server 2019 support (desktop & core)
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step

@@ -21,7 +21,7 @@ location for Install (UNC path with proper permissions) to re-use additional dow
 ### Usage
 
 Syntax:
-Install-Exchange15.ps1 -[InstallCAS|InstallMailbox|InstallMultiRole|Recover|NoSetup] -SourcePath  [-Organization ] [-MDBName ] [-MDBDBPath ] [-MDBLogPath ] [-InstallPath ] [-TargetPath ] [-AutoPilot] [-Credentials ] [-IncludeFixes] [-SCP] [-UseWMF3] [-DisableSSL3] [-Lock]
+Install-Exchange15.ps1 -[InstallCAS|InstallMailbox|InstallMultiRole|Recover|NoSetup] -SourcePath  [-Organization ] [-MDBName ] [-MDBDBPath ] [-MDBLogPath ] [-InstallPath ] [-TargetPath ] [-AutoPilot] [-Credentials ] [-IncludeFixes] [-SCP] [-UseWMF3] [-DisableSSL3] [-Lock] [-SkipRolesCheck]
 
 Examples:
 
