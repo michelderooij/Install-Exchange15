@@ -8,13 +8,13 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 2.99.6, August 20th, 2018
+    Version 2.99.7, August 31th, 2018
 
-    Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius,
-    Bobby West, Pavel Andreev and everyone else who provided feedback or contributed in other ways.
+    Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
+    Pavel Andreev, Rob Whaley and everyone else who provided feedback or contributed in other ways.
 
     .DESCRIPTION
-    This script can install Exchange 2013/2016 prerequisites, optionally create the Exchange
+    This script can install Exchange 2013/2016/2019 Preview prerequisites, optionally create the Exchange
     organization (prepares Active Directory) and installs Exchange Server. When the AutoPilot switch is
     specified, it will do all the required rebooting and automatic logging on using provided credentials.
     To keep track of provided parameters and state, it uses an XML file; if this file is
@@ -26,9 +26,9 @@
 
     .NOTES
     Requirements:
-    - Windows Server 2008 R2 SP1, Windows Server 2012, Windows Server 2012 R2,
-      Windows Server 2016 (Exchange 2016 CU3+ only), or Windows Server 2019 Preview (Exchange 2019 Preview)
-    - Edge role not supported.
+    - Operating Systems: Windows Server 2008 R2 SP1, Windows Server 2012, Windows Server 2012 R2, 
+      Windows Server 2016 (Exchange 2016 CU3+ only), or Windows Server 2019 Preview (Desktop or Core, Exchange 2019 Preview)
+    - Edge role not supported
 
     .REVISIONS
 
@@ -202,6 +202,7 @@
     2.99.5  Added setting desktop background during setup
             Some code cleanup
     2.99.6  Added Exchange 2019 Preview on Windows Server 2019 support (desktop & core)
+    2.99.7  Updated location where hotfix are being published
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -2398,10 +2399,10 @@ process {
 
             # OS specific hotfixes
             Switch( $MajorOSVersion) {
-                $WS2012_MAJOR {
-                    Package-Install "KB2985459" "The W3wp.exe process has high CPU usage when you run PowerShell commands for Exchange" "Windows8-RT-KB2985459-x64.msu|477081_intl_x64_zip.exe" "http://hotfixv4.microsoft.com/Windows%208/Windows%20Server%202012%20RTM/nosp/Fix512067/9200/free/477081_intl_x64_zip.exe" ("/quiet", "/norestart")
+                $WS2012_MAJOR { 
+                    Package-Install "KB2985459" "The W3wp.exe process has high CPU usage when you run PowerShell commands for Exchange" "Windows8-RT-KB2985459-x64.msu|477081_intl_x64_zip.exe" "https://hotfixv4.trafficmanager.net/Windows%208/Windows%20Server%202012%20RTM/nosp/Fix512067/9200/free/477081_intl_x64_zip.exe" ("/quiet", "/norestart")
                     Package-Install "KB2884597" "Virtual Disk Service or applications that use the Virtual Disk Service crash or freeze in Windows Server 2012" "Windows8-RT-KB2884597-x64.msu|467323_intl_x64_zip.exe" "hotfixv4.microsoft.com/Windows%208%20RTM/nosp/Fix469260/9200/free/467323_intl_x64_zip.exe" ("/quiet", "/norestart")
-                    Package-Install "KB2894875" "Windows 8-based or Windows Server 2012-based computer freezes when you run the 'dir' command on an ReFS volume" "Windows8-RT-KB2894875-x64.msu|468889_intl_x64_zip.exe" "http://hotfixv4.microsoft.com/Windows%208%20RTM/nosp/Fix473391/9200/free/468889_intl_x64_zip.exe" ("/quiet", "/norestart")
+                    Package-Install "KB2894875" "Windows 8-based or Windows Server 2012-based computer freezes when you run the 'dir' command on an ReFS volume" "Windows8-RT-KB2894875-x64.msu|468889_intl_x64_zip.exe" "https://hotfixv4.trafficmanager.net/Windows%208%20RTM/nosp/Fix473391/9200/free/468889_intl_x64_zip.exe" ("/quiet", "/norestart")
                     break
                 }
                 $WS2008R2_MAJOR {
@@ -2411,16 +2412,16 @@ process {
                         Package-Install "KB2819745" "Windows Management Framework 4.0" "Windows6.1-KB2819745-x64-MultiPkg.msu" "http://download.microsoft.com/download/3/D/6/3D61D262-8549-4769-A660-230B67E15B25/Windows6.1-KB2819745-x64-MultiPkg.msu" ("/quiet", "/norestart")
                     }
                     Package-Install "KB974405" "Windows Identity Foundation" "Windows6.1-KB974405-x64.msu" "http://download.microsoft.com/download/D/7/2/D72FD747-69B6-40B7-875B-C2B40A6B2BDD/Windows6.1-KB974405-x64.msu" ("/quiet", "/norestart")
-                    Package-Install "KB2619234" "Enable Association Cookie/GUID used by RPC/HTTP to also be used at RPC layer" "Windows6.1-KB2619234-v2-x64.msu|437879_intl_x64_zip.exe" "http://hotfixv4.microsoft.com/Windows 7/Windows Server2008 R2 SP1/sp2/Fix381274/7600/free/437879_intl_x64_zip.exe" ("/quiet", "/norestart")
+                    Package-Install "KB2619234" "Enable Association Cookie/GUID used by RPC/HTTP to also be used at RPC layer" "Windows6.1-KB2619234-v2-x64.msu|437879_intl_x64_zip.exe" "https://hotfixv4.trafficmanager.net/Windows 7/Windows Server2008 R2 SP1/sp2/Fix381274/7600/free/437879_intl_x64_zip.exe" ("/quiet", "/norestart")
                     Package-Install "KB2758857" "Insecure library loading could allow remote code execution (supersedes KB2533623)" "Windows6.1-KB2758857-x64.msu" "http://download.microsoft.com/download/A/9/1/A91A39EA-9BD8-422F-A018-44CD62CA7485/Windows6.1-KB2758857-x64.msu" ("/quiet", "/norestart")
-                    Package-Install "KB3004383" "High CPU usage by an application that depends on a Microsoft LDAP client in Windows Server 2008 R2 SP1" "Windows6.1-KB3004383-x64.msu|478887_intl_x64_zip.exe" "http://hotfixv4.microsoft.com/Windows%207/Windows%20Server2008%20R2%20SP1/sp2/Fix523720/7600/free/478887_intl_x64_zip.exe" ("/quiet", "/norestart")
+                    Package-Install "KB3004383" "High CPU usage by an application that depends on a Microsoft LDAP client in Windows Server 2008 R2 SP1" "Windows6.1-KB3004383-x64.msu|478887_intl_x64_zip.exe" "https://hotfixv4.trafficmanager.net/Windows%207/Windows%20Server2008%20R2%20SP1/sp2/Fix523720/7600/free/478887_intl_x64_zip.exe" ("/quiet", "/norestart")
                     break
                 }
                 $WS2012_MAJOR {
                     break
                 }
                 $WS2012R2_MAJOR {
-                    Package-Install "KB3041832" "CPU usage is high when you use RPC over HTTP protocol in Windows 8.1 or Windows Server 2012 R2" "Windows8.1-KB3041832-x64.msu|482449_intl_x64_zip.exe" "http://hotfixv4.microsoft.com/Windows%208.1/Windows%20Server%202012%20R2/sp1/Fix526512/9600/free/482449_intl_x64_zip.exe" ("/quiet", "/norestart")
+                    Package-Install "KB3041832" "CPU usage is high when you use RPC over HTTP protocol in Windows 8.1 or Windows Server 2012 R2" "Windows8.1-KB3041832-x64.msu|482449_intl_x64_zip.exe" "https://hotfixv4.trafficmanager.net/Windows%208.1/Windows%20Server%202012%20R2/sp1/Fix526512/9600/free/482449_intl_x64_zip.exe" ("/quiet", "/norestart")
                     break
                 }
                 $WS2016_MAJOR {
