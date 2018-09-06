@@ -1169,8 +1169,6 @@ process {
                     Write-MyOutput 'Active Directory looks already updated'.
                 }
             }
-        }else{
-            Set-EdgeDNSSuffix -DNSSuffix $State['EDGEDNSSuffix']
         }
         If ($params.count -gt 0) {
             If(!$State['InstallEDGE']) {
@@ -2521,11 +2519,15 @@ process {
                 Else {
                     Package-Install "{41D635FE-4F9D-47F7-8230-9B29D6D42D31}" "Unified Communications Managed API 4.0 Runtime" "UcmaRuntimeSetup.exe" "http://download.microsoft.com/download/2/C/4/2C47A5C1-A1F3-4843-B9FE-84C0032C61EC/UcmaRuntimeSetup.exe" ("/passive", "/norestart")
                 }
+            }else{
+                Write-MyOutput 'Setting Primary DNS Suffix'
+                Set-EdgeDNSSuffix -DNSSuffix $State['EDGEDNSSuffix']
             }
             If ($State["OrganizationName"]) {
                 Write-MyOutput "Checking/Preparing Active Directory"
                 Prepare-Exchange
             }
+            
         }
 
         4 {
