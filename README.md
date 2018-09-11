@@ -13,20 +13,20 @@ location for Install (UNC path with proper permissions) to re-use additional dow
 ### Requirements
 
 * Windows Server 2008 R2 SP1, Windows Server 2012, Windows Server 2012 R2 or Windows Server 2016 (Exchange 2016 CU3+ only).
-* Domain-joined system.
+* Domain-joined system. (Except for Edge)
 * "AutoPilot" mode requires account with elevated administrator privileges.
 * When you let the script prepare AD, the account needs proper permissions.
-* Edge role not yet supported.
+
 
 ### Usage
 
 Syntax:
-Install-Exchange15.ps1 -[InstallCAS|InstallMailbox|InstallMultiRole|Recover|NoSetup] -SourcePath  [-Organization ] [-MDBName ] [-MDBDBPath ] [-MDBLogPath ] [-InstallPath ] [-TargetPath ] [-AutoPilot] [-Credentials ] [-IncludeFixes] [-SCP] [-UseWMF3] [-DisableSSL3] [-Lock] [-SkipRolesCheck]
+Install-Exchange15.ps1 -[InstallCAS|InstallMailbox|InstallMultiRole|InstallEDGE|Recover|NoSetup] -SourcePath  [-Organization ] [-MDBName ] [-MDBDBPath ] [-MDBLogPath ] [-InstallPath ] [-TargetPath ] [-AutoPilot] [-Credentials ] [-IncludeFixes] [-SCP] [-UseWMF3] [-DisableSSL3] [-Lock] [-SkipRolesCheck] [-EDGEDNSSuffix]
 
 Examples:
 
 ```
-$Cred=Get-Credentials
+$Cred=Get-Credential
 .\Install-Exchange15.ps1 -Organization Fabrikam -InstallMailbox -MDBDBPath C:\MailboxData\MDB1\DB -MDBLogPath C:\MailboxData\MDB1\Log -MDBName MDB1 -InstallPath C:\Install -AutoPilot -Credentials $Cred -SourcePath '\\server\share\Exchange 2013\mu_exchange_server_2013_x64_dvd_1112105' -SCP https://autodiscover.fabrikam.com/autodiscover/autodiscover.xml -Verbose
 ```
 Perform an installation, creating Exchange organization Fabrikam (if it not already exists), using the specified name and location for the initial mailbox database, using provided credentials and
