@@ -8,10 +8,10 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 2.99.8, September 6th, 2018
+    Version 2.99.8, September 12th, 2018
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
-    Pavel Andreev, Rob Whaley and everyone else who provided feedback or contributed in other ways.
+    Pavel Andreev, Rob Whaley, Simon Poirier and everyone else who provided feedback or contributed in other ways.
 
     .DESCRIPTION
     This script can install Exchange 2013/2016/2019 Preview prerequisites, optionally create the Exchange
@@ -26,8 +26,15 @@
 
     .NOTES
     Requirements:
-    - Operating Systems: Windows Server 2008 R2 SP1, Windows Server 2012, Windows Server 2012 R2, 
-      Windows Server 2016 (Exchange 2016 CU3+ only), or Windows Server 2019 Preview (Desktop or Core, Exchange 2019 Preview)
+    - Operating Systems
+        - Windows Server 2008 R2 SP1
+        - Windows Server 2012
+        - Windows Server 2012 R2
+        - Windows Server 2016 (Exchange 2016 CU3+ only)
+        - Windows Server 2019 Preview (Desktop or Core, for Exchange 2019 Preview)
+    - Domain-joined system (Except for Edge)
+    - "AutoPilot" mode requires account with elevated administrator privileges
+    - When you let the script prepare AD, the account needs proper permissions.
 
     .REVISIONS
 
@@ -202,7 +209,7 @@
             Some code cleanup
     2.99.6  Added Exchange 2019 Preview on Windows Server 2019 support (desktop & core)
     2.99.7  Updated location where hotfix are being published
-    2.99.8  Updated to Support Edge
+    2.99.8  Updated to Support Edge (Simon Poirier)
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -217,7 +224,7 @@
     .PARAMETER InstallEdge
     Specifies you want to install the Edge server role  (Exchange 2013/2016).
 
-    .PARAMETER EDGEDNSSuffix
+    .PARAMETER EdgeDNSSuffix
     Specifies the DNS suffix you want to use on your EDGE
 
     .PARAMETER InstallCAS
@@ -331,7 +338,7 @@ param(
     [parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
         [switch]$InstallEDGE,
     [parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
-    	[String]$EDGEDNSSuffix,
+    	[String]$EdgeDNSSuffix,
 	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
         [switch]$Recover,
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
@@ -452,10 +459,10 @@ param(
 
 process {
 
-    $ScriptVersion                  = '2.99.6'
+    $ScriptVersion                  = '2.99.8'
 
     $ERR_OK                         = 0
-    $ERR_PROBLEMADPREPARE	    = 1001
+    $ERR_PROBLEMADPREPARE	        = 1001
     $ERR_UNEXPECTEDOS               = 1002
     $ERR_UNEXPTECTEDPHASE           = 1003
     $ERR_PROBLEMADDINGFEATURE	    = 1004
@@ -1035,12 +1042,12 @@ process {
     }
 
     Function Get-ADSite {
-	Try {
-        	return [System.DirectoryServices.ActiveDirectory.ActiveDirectorySite]::GetComputerSite()
-	}
-	Catch {
-		Return $null
-	}
+        Try {
+                return [System.DirectoryServices.ActiveDirectory.ActiveDirectorySite]::GetComputerSite()
+        }
+        Catch {
+            Return $null
+        }
     }
 
     Function Set-EdgeDNSSuffix ([string]$DNSSuffix){
@@ -2213,7 +2220,7 @@ process {
         $State["SkipRolesCheck"]= $SkipRolesCheck
         $State["SCP"]= $SCP
         $State["Lock"]= $Lock
-        $State["EDGEDNSSuffix"]= $EDGEDNSSuffix
+        $State["EdgeDNSSuffix"]= $EdgeDNSSuffix
         $State["TranscriptFile"]= "$($State["InstallPath"])\$($env:computerName)_$($ScriptName)_$(Get-Date -format "yyyyMMddHHmmss").log"
     
         
@@ -2521,7 +2528,7 @@ process {
                 }
             }else{
                 Write-MyOutput 'Setting Primary DNS Suffix'
-                Set-EdgeDNSSuffix -DNSSuffix $State['EDGEDNSSuffix']
+                Set-EdgeDNSSuffix -DNSSuffix $State['EdgeDNSSuffix']
             }
             If ($State["OrganizationName"]) {
                 Write-MyOutput "Checking/Preparing Active Directory"

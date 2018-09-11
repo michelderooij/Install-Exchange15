@@ -12,16 +12,16 @@ location for Install (UNC path with proper permissions) to re-use additional dow
 
 ### Requirements
 
-* Windows Server 2008 R2 SP1, Windows Server 2012, Windows Server 2012 R2 or Windows Server 2016 (Exchange 2016 CU3+ only).
+* Windows Server 2008 R2 SP1, Windows Server 2012, Windows Server 2012 R2, Windows Server 2016 (Exchange 2016 CU3+ only), 
+  or Windows Server 2019 Preview (Desktop or Core, for Exchange 2019 Preview)
 * Domain-joined system. (Except for Edge)
 * "AutoPilot" mode requires account with elevated administrator privileges.
 * When you let the script prepare AD, the account needs proper permissions.
 
-
 ### Usage
 
 Syntax:
-Install-Exchange15.ps1 -[InstallCAS|InstallMailbox|InstallMultiRole|InstallEDGE|Recover|NoSetup] -SourcePath  [-Organization ] [-MDBName ] [-MDBDBPath ] [-MDBLogPath ] [-InstallPath ] [-TargetPath ] [-AutoPilot] [-Credentials ] [-IncludeFixes] [-SCP] [-UseWMF3] [-DisableSSL3] [-Lock] [-SkipRolesCheck] [-EDGEDNSSuffix]
+Install-Exchange15.ps1 -[InstallCAS|InstallMailbox|InstallMultiRole|InstallEDGE|Recover|NoSetup] -SourcePath  [-Organization ] [-MDBName ] [-MDBDBPath ] [-MDBLogPath ] [-InstallPath ] [-TargetPath ] [-AutoPilot] [-Credentials ] [-IncludeFixes] [-SCP] [-UseWMF3] [-DisableSSL3] [-Lock] [-SkipRolesCheck] [-EdgeDNSSuffix]
 
 Examples:
 
