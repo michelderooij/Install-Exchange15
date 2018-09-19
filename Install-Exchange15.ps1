@@ -336,7 +336,7 @@ param(
    	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
             [switch]$InstallMailbox,
     [parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
-        [switch]$InstallEDGE,
+        [switch]$InstallEdge,
     [parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
     	[String]$EdgeDNSSuffix,
 	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
@@ -845,7 +845,7 @@ process {
         $PlainTextPassword= [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR( (ConvertTo-SecureString $State['AdminPassword']) ))
         $FullPlainTextAccount= get-FullDomainAccount
 	    Try {
-            If( $State['InstallEDGE']) {
+            If( $State['InstallEdge']) {
                 $Username = $FullPlainTextAccount.split("\")[-1]
                 Return $( Test-LocalCredential -UserName $Username -Password $PlainTextPassword)
             }else{
@@ -1063,14 +1063,21 @@ process {
         Write-MyVerbose 'Loading Exchange PowerShell module'
         If( -not ( Get-Command Connect-ExchangeServer -ErrorAction SilentlyContinue)) {
             $SetupPath= (Get-ItemProperty -Path $EXCHANGEINSTALLKEY -Name MsiInstallPath -ErrorAction SilentlyContinue).MsiInstallPath
-            If( $SetupPath -and (Test-Path "$SetupPath\bin\RemoteExchange.ps1" )) {
-                . "$SetupPath\bin\RemoteExchange.ps1" | Out-Null
-                Try {
-                    Connect-ExchangeServer (Get-LocalFQDNHostname)
-                }
-                Catch {
-                    Write-MyError 'Problem loading Exchange module'
-                }
+            If( ($State['InstallEdge'] -eq $true -and $SetupPath -and (Test-Path "$SetupPath\bin\Exchange.ps1")) -or ($State['InstallEdge'] -eq $false -and $SetupPath -and (Test-Path "$SetupPath\bin\RemoteExchange.ps1"))) {
+                If( $State['InstallEdge']) {
+                    Add-PSSnapin Microsoft.Exchange.Management.PowerShell.E2010
+                    . "$SetupPath\bin\Exchange.ps1" | Out-Null
+                }else{
+                    . "$SetupPath\bin\RemoteExchange.ps1" | Out-Null
+                    Try {
+                        Connect-ExchangeServer (Get-LocalFQDNHostname)
+                    }
+                    Catch {
+                        Write-MyError 'Problem loading Exchange module'
+                    }
+                } 
+             
+                
             }
             Else {
                 Write-MyWarning "Can't determine installation path to load Exchange module"
@@ -1105,7 +1112,7 @@ process {
             Else {
 
                 $roles= @()
-                If( $State['InstallEDGE']) {
+                If( $State['InstallEdge']) {
                     $roles = 'EdgeTransport'
                 }else{
                     If( $State['InstallMailbox']) {
@@ -1147,7 +1154,7 @@ process {
     }
 
     Function Prepare-Exchange {
-        If(!$State['InstallEDGE']) {
+        If(!$State['InstallEdge']) {
             Write-MyOutput 'Preparing Active Directory'
             $params= @()
             Write-MyOutput 'Checking Exchange organization existence'
@@ -1178,7 +1185,7 @@ process {
             }
         }
         If ($params.count -gt 0) {
-            If(!$State['InstallEDGE']) {
+            If(!$State['InstallEdge']) {
                 Write-MyOutput "Preparing AD, Exchange organization will be $($State['OrganizationName'])"¨
             }
             $params+= '/IAcceptExchangeServerLicenseTerms'
@@ -1209,7 +1216,7 @@ process {
                 break
             }
             $WS2016_MAJOR {
-                If($State['InstallEDGE']) {
+                If($State['InstallEdge']) {
                     $Feats= ('ADLDS', 'Bits')
                 }else{
                     $Feats= ('RSAT-ADDS', 'Bits', 'RSAT-Clustering-CmdInterface')
@@ -1703,7 +1710,7 @@ process {
             }
         }
 
-	If( $State["SkipRolesCheck"] -or $State['InstallEDGE']) {
+	If( $State["SkipRolesCheck"] -or $State['InstallEdge']) {
                 Write-MyOutput 'SkipRolesCheck: Skipping validation of Schema & Enterprise Administrators membership'
         }
         Else {
@@ -1723,7 +1730,7 @@ process {
                 Write-MyOutput 'User is member of Enterprise Administrators'
             }
         }
-        if(!$State['InstallEDGE']){
+        if(!$State['InstallEdge']){
             $ADSite= Get-ADSite
             If( $ADSite) {
                 Write-MyOutput "Computer is located in AD site $ADSite"
@@ -1790,7 +1797,7 @@ process {
         Else {
             Write-MyOutput 'Checking roles to install'
             If( $State['MajorSetupVersion'] -ge $EX2016_MAJOR) {
-                If ( !( $State['InstallMailbox']) -and !($State['InstallEDGE']) ) {
+                If ( !( $State['InstallMailbox']) -and !($State['InstallEdge']) ) {
                     Write-MyError 'No roles specified to install'
                     Exit $ERR_UNKNOWNROLESSPECIFIED
                 }
@@ -1799,13 +1806,13 @@ process {
                 }
             }
             Else {
-                If ( !( $State['InstallMailbox']) -and !( $State['InstallCAS']) -and !($State['InstallEDGE']) ) {
+                If ( !( $State['InstallMailbox']) -and !( $State['InstallCAS']) -and !($State['InstallEdge']) ) {
                     Write-MyError 'No roles specified to install'
                     Exit $ERR_UNKNOWNROLESSPECIFIED
                 }
             }
         }
-        if( !($State['InstallEDGE'])){
+        if( !($State['InstallEdge'])){
             If( ( Test-ExistingExchangeServer $env:computerName) -and ($State["InstallPhase"] -eq 1)) {
                 If( $State['Recover']) {
                     Write-MyOutput 'Recovery mode specified, Exchange server object found'
@@ -1858,7 +1865,7 @@ process {
                 Exit $ERR_MDBDBLOGPATH
             }
         }
-        if( !($State['InstallEDGE'])){
+        if( !($State['InstallEdge'])){
             Write-MyOutput 'Checking Exchange Forest Schema Version'
             If( $State['MajorSetupVersion'] -ge $EX2016_MAJOR) {
                 $minFFL= $EX2016_MINFORESTLEVEL
@@ -2518,7 +2525,7 @@ process {
         }
 
         3 {
-            if( !($State['InstallEDGE'])){
+            if( !($State['InstallEdge'])){
             Write-MyOutput "Installing Exchange prerequisites (continued)"
                 If( (is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL) -and (is-ServerCore) ) {
                     Package-Install "{41D635FE-4F9D-47F7-8230-9B29D6D42D31}" "Unified Communications Managed API 4.0 Runtime (Core)" "Setup.exe" (Join-Path -Path $State['SourcePath'] -ChildPath 'UcmaRedist\Setup.exe') ("/passive", "/norestart") -NoDownload
@@ -2589,7 +2596,7 @@ process {
  		    If( $State["InstallCAS"]) {
                 # Insert Client Access Server specifics here
             }
-            If( $State["InstallEDGE"]) {
+            If( $State["InstallEdge"]) {
                 # Insert Edge Server specifics here
             }
             # Insert generic customizations here
