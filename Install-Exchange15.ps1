@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 2.99.8, September 12th, 2018
+    Version 2.99.81, September 28th, 2018
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier and everyone else who provided feedback or contributed in other ways.
@@ -210,6 +210,7 @@
     2.99.6  Added Exchange 2019 Preview on Windows Server 2019 support (desktop & core)
     2.99.7  Updated location where hotfix are being published
     2.99.8  Updated to Support Edge (Simon Poirier)
+    2.99.81 Fixed phase sequencing with reboot pending
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -459,10 +460,10 @@ param(
 
 process {
 
-    $ScriptVersion                  = '2.99.8'
+    $ScriptVersion                  = '2.99.81'
 
     $ERR_OK                         = 0
-    $ERR_PROBLEMADPREPARE	        = 1001
+    $ERR_PROBLEMADPREPARE	    = 1001
     $ERR_UNEXPECTEDOS               = 1002
     $ERR_UNEXPTECTEDPHASE           = 1003
     $ERR_PROBLEMADDINGFEATURE	    = 1004
