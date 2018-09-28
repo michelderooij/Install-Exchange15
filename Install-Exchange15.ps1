@@ -2291,6 +2291,7 @@ process {
 
     Write-MyOutput "Checking for pending reboot .."
     If( is-RebootPending ) {
+        $State["InstallPhase"]--
         If( $State["AutoPilot"]) {
             Write-MyWarning "Reboot pending, will reboot system and rerun phase"
         }
