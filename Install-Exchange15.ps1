@@ -211,7 +211,7 @@
     2.99.7  Updated location where hotfix are being published
     2.99.8  Updated to Support Edge (Simon Poirier)
     2.99.81 Fixed phase sequencing with reboot pending
-    2.99.92 Added reapplying KB2565063 (MS11-025) to IncludeFixes
+    2.99.82 Added reapplying KB2565063 (MS11-025) to IncludeFixes
             Changed downloading VC++ Package to filename indicating version
             Added post-setup Healthcheck / IIS Warmup
 
@@ -463,10 +463,10 @@ param(
 
 process {
 
-    $ScriptVersion                  = '2.99.81'
+    $ScriptVersion                  = '2.99.82'
 
     $ERR_OK                         = 0
-    $ERR_PROBLEMADPREPARE	    = 1001
+    $ERR_PROBLEMADPREPARE	        = 1001
     $ERR_UNEXPECTEDOS               = 1002
     $ERR_UNEXPTECTEDPHASE           = 1003
     $ERR_PROBLEMADDINGFEATURE	    = 1004
