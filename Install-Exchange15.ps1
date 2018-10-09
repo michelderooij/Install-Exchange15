@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 2.99.81, September 28th, 2018
+    Version 2.99.82, October 9th, 2018
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier and everyone else who provided feedback or contributed in other ways.
@@ -195,7 +195,7 @@
             Fixed InstallMDBDBPath location check
             Added support for for Exchange 2016 CU10
             Added support for for Exchange 2013 CU21
-            Added Visual C++ Redistributable prereq (Ex2016CU10+/Ex2013CU21+)
+            Added Visual C++ 2013 Redistributable prereq (Ex2016CU10+/Ex2013CU21+)
             Fixed Exchange setup result detection
             Changed code to determine AD Configuration container
             Changed script to abort on non-static IP presence
@@ -211,6 +211,9 @@
     2.99.7  Updated location where hotfix are being published
     2.99.8  Updated to Support Edge (Simon Poirier)
     2.99.81 Fixed phase sequencing with reboot pending
+    2.99.92 Added reapplying KB2565063 (MS11-025) to IncludeFixes
+            Changed downloading VC++ Package to filename indicating version
+            Added post-setup Healthcheck / IIS Warmup
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -741,6 +744,11 @@ process {
     Function is-MinimalBuild {
         Param ( [String]$BuildNumber, [String]$ReferenceBuildNumber)
         Return ([System.Version]$BuildNumber -ge [System.Version]$ReferenceBuildNumber)
+    }
+
+    Function is-MaximumBuild {
+        Param ( [String]$BuildNumber, [String]$ReferenceBuildNumber)
+        Return ([System.Version]$BuildNumber -le [System.Version]$ReferenceBuildNumber)
     }
 
     Function is-ServerCore {
@@ -2215,7 +2223,7 @@ process {
         $State["IncludeFixes"]= $IncludeFixes
         $State["NoSetup"]= $NoSetup
         $State["Recover"]= $Recover
-        $State["Upgrade"]= $False
+        $State["Upgrade"]= $false
         $State["UseWMF3"]= $UseWMF3
         $State["NoNet461"]= $NoNet461
         $State["NoNet471"]= $NoNet471
@@ -2522,7 +2530,7 @@ process {
 
             # Check if need to install VC++ Runtime 2013
             If ( $State["VCRedist2013"] ) {
-                Package-Install "{A749D8E6-B613-3BE3-8F5F-045C84EBA29B}" "Visual C++ 2013 Redistributable" "vcredist_x64.exe" "https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91DA-3737CD5CD6E3/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
+                Package-Install "{A749D8E6-B613-3BE3-8F5F-045C84EBA29B}" "Visual C++ 2013 Redistributable" "vcredist_x64_2013.exe" "https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91DA-3737CD5CD6E3/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
             }
         }
 
@@ -2638,6 +2646,11 @@ process {
                 default {
 
                 }
+
+              }
+              If( ($State["MajorSetupVersion"] -eq $EX2016_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2016SETUPEXE_CU10)) -or
+                  ($State["MajorSetupVersion"] -eq $EX2013_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2013SETUPEXE_CU20))) {
+                  Package-Install "{1D8E6291-B0D5-35EC-8441-6616F567A0F7}" "Microsoft Visual C++ 2010 Service Pack 1 Redistributable Package MFC Security Update" "vcredist_x64_2010.exe" "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
               }
             }
         }
@@ -2656,6 +2669,22 @@ process {
                 Write-MyVerbose 'Restoring wallpaper configuration'
                 Set-WallPaper -Path $State['Wallpaper'] -Style $State['WallpaperStyle']
             }
+
+            # Warmup IIS
+            $web = New-Object Net.WebClient
+            # To ignore self-signed cert warnings
+            [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+            'OWA', 'ECP', 'EWS', 'Autodiscover', 'Microsoft-Server-ActiveSync', 'OAB', 'mapi', 'rpc' | ForEach-Object {
+                $url = 'https://localhost/{0}/healthcheck.htm' -f $_
+                Try {
+                    $output = $web.DownloadString($url)
+                    Write-MyOutput ('Healthcheck {0}: {1}' -f $url, ($output -split '<')[0])
+                }
+                Catch {
+                    Write-MyWarning ('Healthcheck {0}: {1}' -f $url, 'ERR')
+                }
+            }
+            [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $null
 
             Enable-UAC
             Enable-IEESC
