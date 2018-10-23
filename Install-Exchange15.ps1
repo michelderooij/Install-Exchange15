@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 2.99.9, October 16th, 2018
+    Version 3.00.0, October 23rd, 2018
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier and everyone else who provided feedback or contributed in other ways.
@@ -218,6 +218,8 @@
             Updated SourcePath parameter usage (ISO)
             Added .NET Framework 4.7.2 support
             Added Windows Defender presence check
+    3.00.0  Added Exchange 2019 support
+            Rewritten VC++ detection
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -478,7 +480,7 @@ param(
 
 process {
 
-    $ScriptVersion                  = '2.99.9'
+    $ScriptVersion                  = '3.00.0'
 
     $ERR_OK                         = 0
     $ERR_PROBLEMADPREPARE	    = 1001
@@ -515,12 +517,15 @@ process {
     $DOMAIN_MIXEDMODE               = 0
     $FOREST_LEVEL2003               = 2
     $FOREST_LEVEL2008R2             = 4
+    $FOREST_LEVEL2012R2             = 6
 
     # Minimum FFL/DFL levels
     $EX2013_MINFORESTLEVEL          = 15137
     $EX2013_MINDOMAINLEVEL          = 13236
     $EX2016_MINFORESTLEVEL          = 15317
     $EX2016_MINDOMAINLEVEL          = 13236
+    $EX2019_MINFORESTLEVEL          = 17000
+    $EX2019_MINDOMAINLEVEL          = 13236
 
     # Exchange Versions
     $EX2013_MAJOR                   = '15.0'
@@ -567,6 +572,7 @@ process {
     $EX2016SETUPEXE_CU10            = '15.01.1531.003'
     $EX2016SETUPEXE_CU11            = '15.01.1591.008'
     $EX2019SETUPEXE_PRE             = '15.02.0196.000'
+    $EX2019SETUPEXE_RTM             = '15.02.0221.012'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
@@ -644,6 +650,7 @@ process {
         $EX2016SETUPEXE_CU10= 'Exchange Server 2016 Cumulative Update 10';
         $EX2016SETUPEXE_CU11= 'Exchange Server 2016 Cumulative Update 11';
         $EX2019SETUPEXE_PRE= 'Exchange Server 2019 Public Preview';
+        $EX2019SETUPEXE_RTM= 'Exchange Server 2019 RTM';
       }
       $res= "Unknown version (build $FileVersion)"
       $Versions.GetEnumerator() | ForEach {
@@ -1243,13 +1250,14 @@ process {
             $WS2016_MAJOR {
                 If($State['InstallEdge']) {
                     $Feats= ('ADLDS', 'Bits')
-                }else{
+                }
+                Else{
                     $Feats= ('RSAT-ADDS', 'Bits', 'RSAT-Clustering-CmdInterface')
                 }
                 
                 If( (is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL) -and (is-ServerCore) ) {
-			$Feats+= 'Server-Media-Foundation'
-		}
+			        $Feats+= 'Server-Media-Foundation'
+		        }
                 break
             }
             default {
@@ -1297,8 +1305,15 @@ process {
     Function Package-Install () {
         Param ( [String]$PackageID, [string]$Package, [String]$FileName, [String]$OnlineURL, [array]$Arguments, [switch]$NoDownload)
 
-        Write-MyOutput "Processing $Package ($PackageID)"
-        $PresenceKey= Package-IsInstalled $PackageID
+        If( $PackageID) {
+            Write-MyOutput "Processing $Package ($PackageID)"
+            $PresenceKey= Package-IsInstalled $PackageID
+        }
+        Else {
+            # Just install, don't detect
+            Write-MyOutput "Processing $Package"
+            $PresenceKey= $true
+        }
         $RunFrom= $State['InstallPath']
         If( !( $PresenceKey )){
 
@@ -1335,7 +1350,14 @@ process {
             Write-MyOutput "Installing $Package from $RunFrom"
             $rval= StartWait-Process $RunFrom $FileName $Arguments
 
-            If( ( @(3010,-2145124329) -contains $rval) -or (Package-IsInstalled $PackageID))  {
+            If( $PackageID) {
+                $PresenceKey= Package-IsInstalled $PackageID
+            }
+            Else {
+                # Don't check post-installation
+                $PresenceKey= $true
+            }
+            If( ( @(3010,-2145124329) -contains $rval) -or $PresenceKey)  {
                 switch ( $rval) {
                     3010: {
                         Write-MyVerbose "Installation $Package successful, reboot required"
@@ -1700,7 +1722,7 @@ process {
             Write-MyOutput "Operating System is $($MajorOSVersion).$($MinorOSVersion)"
         }
         Else {
-            Write-MyError 'The following Operating Systems are supported: Windows Server 2008 R2 SP1+, Windows Server 2012, Windows Server 2012 R2, Windows Server 2016 (Exchange 2016 CU3 or later only) or Windows Server 2019 Preview (Exchange 2019 Preview only)'
+            Write-MyError 'The following Operating Systems are supported: Windows Server 2008 R2 SP1+, Windows Server 2012, Windows Server 2012 R2, Windows Server 2016 (Exchange 2016 CU3 or later only) or Windows Server 2019 (Exchange 2019)'
             Exit $ERR_UNEXPECTEDOS
         }
         Write-MyOutput ('Server core mode: {0}' -f (is-ServerCore))
@@ -1817,6 +1839,10 @@ process {
             Write-MyError 'Windows Server 2016 is only supported for Exchange Server 2016 CU3 and later.'
             Exit $ERR_UNEXPECTEDOS
         }
+        If( (is-MinimalBuild $SetupVersion $EX2019SETUPEXE_RTM) -and -not (is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL)  ) {
+            Write-MyError 'Exchange Server 2019 is only supported on Windows Server 2019.'
+            Exit $ERR_UNEXPECTEDOS
+        }
         If( $UseWMF3 -and (is-MinimalBuild $SetupVersion $EX2013SETUPEXE_SP1)) {
             Write-MyWarning 'WMF3 is not supported for Exchange Server 2013 SP1 and up'
         }
@@ -1897,8 +1923,14 @@ process {
         if( !($State['InstallEdge'])){
             Write-MyOutput 'Checking Exchange Forest Schema Version'
             If( $State['MajorSetupVersion'] -ge $EX2016_MAJOR) {
-                $minFFL= $EX2016_MINFORESTLEVEL
-                $minDFL= $EX2016_MINDOMAINLEVEL
+                If( $State['MajorSetupVersion'] -ge $EX2019_MAJOR) {
+                    $minFFL= $EX2019_MINFORESTLEVEL
+                    $minDFL= $EX2019_MINDOMAINLEVEL
+                }
+                Else {
+                    $minFFL= $EX2016_MINFORESTLEVEL
+                    $minDFL= $EX2016_MINDOMAINLEVEL
+                }
             }
             Else {
                 $minFFL= $EX2013_MINFORESTLEVEL
@@ -1944,24 +1976,36 @@ process {
             Write-MyOutput 'Checking Forest Functional Level'
             $FFL= Get-ForestFunctionalLevel
             Write-MyVerbose "Forest Functional Level=$FFL"
-            If( $FFL -lt $FOREST_LEVEL2003) {
-                Write-MyError 'Forest is not Functional Level 2003 or later'
-                Exit $ERR_ADFORESTLEVEL
-            }
-            Else {
-                If( $FFL -lt $FOREST_LEVEL2008R2) {
-                    If( ($MajorOSVersion -eq $WS2016_MAJOR ) -and -not (is-MinimalBuild $SetupVersion $EX2016SETUPEXE_CU7)) {
-                        Write-MyError ('Exchange Server 2016 CU7 and later requires Forest Functionality Level 2008R2 (is {0}).' -f $FFL)
-                        Exit $ERR_ADFORESTLEVEL
-                    }
-                    Else {
-                        Write-MyOutput 'Forest Functional Level is 2008R2 or later'
-                    }
+            If( $FFL -lt $FOREST_LEVEL2012R2) {
+                If( is-MinimalBuild $SetupVersion $EX2019SETUPEXE_RTM) {
+                    Write-MyError ('Exchange Server 2019 or later requires Forest Functionality Level 2012R2 (is {0}).' -f $FFL)
+                    Exit $ERR_ADFORESTLEVEL
                 }
                 Else {
-                    Write-MyOutput 'Forest Functional Level is 2003 or later'
+                    If( $FFL -lt $FOREST_LEVEL2008R2) {
+                        If( is-MinimalBuild $SetupVersion $EX2016SETUPEXE_CU7) {
+                            Write-MyError ('Exchange Server 2016 CU7 and later requires Forest Functionality Level 2008R2 (is {0}).' -f $FFL)
+                            Exit $ERR_ADFORESTLEVEL
+                        }
+                        Else {
+                            Write-MyOutput 'Forest Functional Level is 2012 R2 or later'
+                        }
+                    }
+                    Else {
+                        If( $FFL -lt $FOREST_LEVEL2003) {
+                            Write-MyError 'Forest is not Functional Level 2003 or later'
+                            Exit $ERR_ADFORESTLEVEL
+                        }
+                        Else {
+                            Write-MyOutput 'Forest Functional Level is 2003 or later'
+                        }
+                    }
                 }
             }
+            Else {
+                Write-MyOutput 'Forest Functional Level is 2012 R2 or later'
+            }
+
         }
         If( Get-PSExecutionPolicy) {
             # Referring to http://support.microsoft.com/kb/2810617/en
@@ -2215,6 +2259,30 @@ process {
             return $null
         }
     }
+
+    Function Get-VCRuntime {
+        Param ( 
+            [String]$version
+        )
+        Write-MyVerbose ('Looking for presence of Visual C++ v{0} Runtime' -f $version)
+        $RegPaths= @(
+            'HKLM:\Software\WOW6432Node\Microsoft\VisualStudio\{0}\VC\Runtimes\x64', 
+            'HKLM:\Software\Microsoft\VisualStudio\{0}\VC\Runtimes\x64',
+            'HKLM:\Software\WOW6432Node\Microsoft\VisualStudio\{0}\VC\VCRedist\x64', 
+            'HKLM:\Software\Microsoft\VisualStudio\{0}\VC\VCRedist\x64')
+        $presence= $false
+        ForEach( $RegPath in $RegPaths) {
+
+            $Key= (Get-ItemProperty -Path ($RegPath -f $version) -Name Installed -ErrorAction SilentlyContinue).Installed
+            If( $Key -eq 1) {
+                $build= (Get-ItemProperty -Path ($RegPath -f $version) -Name Version -ErrorAction SilentlyContinue).Version
+                Write-MyVerbose ('Found Visual C++ Runtime, build {0}' -f $build)
+                $presence= $true
+            }
+        }
+        return $presence
+    }
+
     ########################################
     # MAIN
     ########################################
@@ -2609,24 +2677,27 @@ process {
             }
 
             # Check if need to install VC++ Runtimes
-            If ( $State["VCRedist2012"] ) {
-                Package-Install "{37B8F9C7-03FB-3253-8781-2517C99D7C00}|{CF2BEA3C-26EA-32F8-AA9B-331F7E34BA97}" "Visual C++ 2012 Redistributable" "vcredist_x64_2012.exe" "https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
+            if( ($State['InstallEdge'])){
+                If( -not (Get-VCRuntime -version '11.0') -and $State["VCRedist2012"] ) {
+                    Package-Install "" "Visual C++ 2012 Redistributable" "vcredist_x64_2012.exe" "https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
+                }
             }
-            If ( $State["VCRedist2013"] ) {
-                Package-Install "{A749D8E6-B613-3BE3-8F5F-045C84EBA29B}|{5740BD44-B58D-321A-AFC0-6D3D4556DD6C}|{CB0836EC-B072-368D-82B2-D3470BF95707}|{929FBD26-9020-399B-9A7A-751D61F0B942}|{A749D8E6-B613-3BE3-8F5F-045C84EBA29B}" "Visual C++ 2013 Redistributable" "vcredist_x64_2013.exe" "https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91DA-3737CD5CD6E3/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
+
+            If( -not (Get-VCRuntime -version '12.0') -and $State["VCRedist2013"] ) {
+                Package-Install "" "Visual C++ 2013 Redistributable" "vcredist_x64_2013.exe" "https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91DA-3737CD5CD6E3/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
             }
         }
 
         3 {
             if( !($State['InstallEdge'])){
-            Write-MyOutput "Installing Exchange prerequisites (continued)"
+                Write-MyOutput "Installing Exchange prerequisites (continued)"
                 If( (is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL) -and (is-ServerCore) ) {
                     Package-Install "{41D635FE-4F9D-47F7-8230-9B29D6D42D31}" "Unified Communications Managed API 4.0 Runtime (Core)" "Setup.exe" (Join-Path -Path $State['SourcePath'] -ChildPath 'UcmaRedist\Setup.exe') ("/passive", "/norestart") -NoDownload
                 }
                 Else {
                     Package-Install "{41D635FE-4F9D-47F7-8230-9B29D6D42D31}" "Unified Communications Managed API 4.0 Runtime" "UcmaRuntimeSetup.exe" "http://download.microsoft.com/download/2/C/4/2C47A5C1-A1F3-4843-B9FE-84C0032C61EC/UcmaRuntimeSetup.exe" ("/passive", "/norestart")
                 }
-            }else{
+            } else {
                 Write-MyOutput 'Setting Primary DNS Suffix'
                 Set-EdgeDNSSuffix -DNSSuffix $State['EdgeDNSSuffix']
             }
