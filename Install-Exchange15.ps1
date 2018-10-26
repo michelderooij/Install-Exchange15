@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.00.0, October 23rd, 2018
+    Version 3.00.1, October 26rd, 2018
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier and everyone else who provided feedback or contributed in other ways.
@@ -220,6 +220,7 @@
             Added Windows Defender presence check
     3.00.0  Added Exchange 2019 support
             Rewritten VC++ detection
+    3.00.1  Integrated Exchange 2019 RTM Cipher correction
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -1484,6 +1485,42 @@ process {
         Else {
             Write-MyError 'KB2997355: Unable to locate Exchange install path'
         }
+    }
+
+    Function Exchange2019-FixCipherSuite {
+        # Taken from https://gallery.technet.microsoft.com/Update-Exchange-2019-RTM-a65d0325
+        $script:cipherSuite = @( 'TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384',
+                         'TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256',
+                         'TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384',
+                         'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256',
+                         'TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384',
+                         'TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256',
+                         'TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384',
+                         'TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256' );
+
+        # Vacate current list of suites
+        $suites = Get-TLSCipherSuite;
+
+        foreach ($suite in $suites)
+        {
+            if (Get-TlsCipherSuite -Name $suite.Name)
+            {
+                Disable-TlsCipherSuite -Name $suite.Name;
+            }
+        }
+
+        # Enable Cipher Suites
+        foreach($suite in $cipherSuite)
+        {
+            if ($suite -ne $null)
+            {
+               Enable-TlsCipherSuite -Name $suite;
+            }
+        }
+
+        #Configure Elliptic Curve Preference
+        Disable-TlsEccCurve "curve25519";
+        Enable-TlsEccCurve "NistP384" -Position 0
     }
 
     Function Get-NetVersionText( $NetVersion= 0) {
@@ -2796,6 +2833,9 @@ process {
                 $EX2013SETUPEXE_CU6 {
                     Exchange2013-KB2997355-FixIt
                     break
+                }
+                $EX2019SETUPEXE_RTM {
+                    Exchange2019-FixCipherSuite
                 }
                 default {
 
