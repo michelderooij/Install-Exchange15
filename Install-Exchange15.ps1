@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 2.99.8, September 12th, 2018
+    Version 3.00.1, October 26rd, 2018
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier and everyone else who provided feedback or contributed in other ways.
@@ -193,9 +193,9 @@
             Minor bugs and cosmetics fixes
     2.99.2  Fixed Recover Mode Phase 
             Fixed InstallMDBDBPath location check
-            Added support for for Exchange 2016 CU10
-            Added support for for Exchange 2013 CU21
-            Added Visual C++ Redistributable prereq (Ex2016CU10+/Ex2013CU21+)
+            Added support for Exchange 2016 CU10
+            Added support for Exchange 2013 CU21
+            Added Visual C++ 2013 Redistributable prereq (Ex2016CU10+/Ex2013CU21+)
             Fixed Exchange setup result detection
             Changed code to determine AD Configuration container
             Changed script to abort on non-static IP presence
@@ -210,6 +210,17 @@
     2.99.6  Added Exchange 2019 Preview on Windows Server 2019 support (desktop & core)
     2.99.7  Updated location where hotfix are being published
     2.99.8  Updated to Support Edge (Simon Poirier)
+    2.99.81 Fixed phase sequencing with reboot pending
+    2.99.82 Added reapplying KB2565063 (MS11-025) to IncludeFixes
+            Changed downloading VC++ Package to filename indicating version
+            Added post-setup Healthcheck / IIS Warmup
+    2.99.9  Added support for Exchange 2016 CU11
+            Updated SourcePath parameter usage (ISO)
+            Added .NET Framework 4.7.2 support
+            Added Windows Defender presence check
+    3.00.0  Added Exchange 2019 support
+            Rewritten VC++ detection
+    3.00.1  Integrated Exchange 2019 RTM Cipher correction
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -249,8 +260,9 @@
     its version and which prerequisites should be installed.
 
     .PARAMETER SourcePath
-    Specifies location of the Exchange installation files (setup.exe).
-    -
+    Specifies location of the Exchange installation files (setup.exe) or the location of 
+    the Exchange installation ISO. This ISO will be mounted during installation.
+    
     .PARAMETER TargetPath
     Specifies the location where to install the Exchange binaries.
 
@@ -280,6 +292,10 @@
 
     .PARAMETER NONET471
     Prevents installing .NET Framework 4.7.x and uses 4.6.2 when a supported Exchange version
+    is being deployed.
+
+    .PARAMETER NONET472
+    Prevents installing .NET Framework 4.7.2 and uses 4.7.1 when a supported Exchange version
     is being deployed.
 
     .PARAMETER DisableSSL3
@@ -364,7 +380,7 @@ param(
 	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
-        [ValidateScript({ Test-Path $_ -PathType Container })]
+        [ValidateScript({ (Test-Path -Path $_ -PathType Container) -or (Get-DiskImage -ImagePath $_) })]
 		[string]$SourcePath,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
@@ -406,6 +422,12 @@ param(
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
         [Switch]$NoNet471,
+ 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
+        [Switch]$NoNet472,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
@@ -459,10 +481,10 @@ param(
 
 process {
 
-    $ScriptVersion                  = '2.99.8'
+    $ScriptVersion                  = '3.00.0'
 
     $ERR_OK                         = 0
-    $ERR_PROBLEMADPREPARE	        = 1001
+    $ERR_PROBLEMADPREPARE	    = 1001
     $ERR_UNEXPECTEDOS               = 1002
     $ERR_UNEXPTECTEDPHASE           = 1003
     $ERR_PROBLEMADDINGFEATURE	    = 1004
@@ -496,12 +518,15 @@ process {
     $DOMAIN_MIXEDMODE               = 0
     $FOREST_LEVEL2003               = 2
     $FOREST_LEVEL2008R2             = 4
+    $FOREST_LEVEL2012R2             = 6
 
     # Minimum FFL/DFL levels
     $EX2013_MINFORESTLEVEL          = 15137
     $EX2013_MINDOMAINLEVEL          = 13236
     $EX2016_MINFORESTLEVEL          = 15317
     $EX2016_MINDOMAINLEVEL          = 13236
+    $EX2019_MINFORESTLEVEL          = 17000
+    $EX2019_MINDOMAINLEVEL          = 13236
 
     # Exchange Versions
     $EX2013_MAJOR                   = '15.0'
@@ -546,7 +571,9 @@ process {
     $EX2016SETUPEXE_CU8             = '15.01.1415.002'
     $EX2016SETUPEXE_CU9             = '15.01.1466.003'
     $EX2016SETUPEXE_CU10            = '15.01.1531.003'
+    $EX2016SETUPEXE_CU11            = '15.01.1591.008'
     $EX2019SETUPEXE_PRE             = '15.02.0196.000'
+    $EX2019SETUPEXE_RTM             = '15.02.0221.012'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
@@ -577,7 +604,7 @@ process {
         $State= @{}
         If(Test-Path $StateFile) {
             $State= Import-Clixml -Path $StateFile -ErrorAction SilentlyContinue
-            Write-MyVerbose "State information loaded from $StateFile"
+            Write-Verbose "State information loaded from $StateFile"
         }
         Else {
             Write-Verbose "No state file found at $StateFile"
@@ -622,13 +649,15 @@ process {
         $EX2016SETUPEXE_CU8= 'Exchange Server 2016 Cumulative Update 8';
         $EX2016SETUPEXE_CU9= 'Exchange Server 2016 Cumulative Update 9';
         $EX2016SETUPEXE_CU10= 'Exchange Server 2016 Cumulative Update 10';
+        $EX2016SETUPEXE_CU11= 'Exchange Server 2016 Cumulative Update 11';
         $EX2019SETUPEXE_PRE= 'Exchange Server 2019 Public Preview';
+        $EX2019SETUPEXE_RTM= 'Exchange Server 2019 RTM';
       }
-      if ($Versions[$FileVersion]) {
-        $res= "$($Versions[$FileVersion]) (build $FileVersion)"
-      }
-      Else {
-        $res= "Unknown version (build $FileVersion)"
+      $res= "Unknown version (build $FileVersion)"
+      $Versions.GetEnumerator() | ForEach {
+          If( is-MinimalBuild $_.Name $FileVersion) {
+              $res= '{0} (build {1})' -f $_.Value, $FileVersion
+          }
       }
       return $res
     }
@@ -687,7 +716,6 @@ process {
         return $PSPolicyKey
     }
 
-
     Function Check-Package () {
         Param ( [String]$Package, [String]$URL, [String]$FileName, [String]$InstallPath)
         $res= $true
@@ -740,6 +768,11 @@ process {
     Function is-MinimalBuild {
         Param ( [String]$BuildNumber, [String]$ReferenceBuildNumber)
         Return ([System.Version]$BuildNumber -ge [System.Version]$ReferenceBuildNumber)
+    }
+
+    Function is-MaximumBuild {
+        Param ( [String]$BuildNumber, [String]$ReferenceBuildNumber)
+        Return ([System.Version]$BuildNumber -le [System.Version]$ReferenceBuildNumber)
     }
 
     Function is-ServerCore {
@@ -1218,13 +1251,14 @@ process {
             $WS2016_MAJOR {
                 If($State['InstallEdge']) {
                     $Feats= ('ADLDS', 'Bits')
-                }else{
+                }
+                Else{
                     $Feats= ('RSAT-ADDS', 'Bits', 'RSAT-Clustering-CmdInterface')
                 }
                 
                 If( (is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL) -and (is-ServerCore) ) {
-			$Feats+= 'Server-Media-Foundation'
-		}
+			        $Feats+= 'Server-Media-Foundation'
+		        }
                 break
             }
             default {
@@ -1248,17 +1282,21 @@ process {
     }
 
     Function Package-IsInstalled( $PackageID) {
-        Write-MyVerbose "Checking if package $PackageID is installed .."
+        # Some packages are released using different GUIDs, specify more than 1 using '|'
+        $PackageSet= $PackageID.split('|')
         $PresenceKey= $null
-        $PresenceKey= (Get-WmiObject win32_quickfixengineering | Where-Object { $_.HotfixID -eq $PackageID }).HotfixID
-        If( !( $PresenceKey)) {
-            $PresenceKey= (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$PackageID" -Name 'DisplayName' -ErrorAction SilentlyContinue).DisplayName
-            If(!( $PresenceKey)) {
-                # Alternative (seen KB2803754, 2802063 register here)
-                $PresenceKey= (Get-ItemProperty -Path "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\$PackageID" -Name 'DisplayName' -ErrorAction SilentlyContinue).DisplayName
-                If( !( $PresenceKey)){
-                    # Alternative (Office2010FilterPack SP1)
-                    $PresenceKey= (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\$PackageID" -Name 'DisplayName' -ErrorAction SilentlyContinue).DisplayName
+        ForEach( $ID in $PackageSet) {
+            Write-MyVerbose "Checking if package $ID is installed .."
+            $PresenceKey= (Get-WmiObject win32_quickfixengineering | Where-Object { $_.HotfixID -eq $ID }).HotfixID
+            If( !( $PresenceKey)) {
+                $PresenceKey= (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$ID" -Name 'DisplayName' -ErrorAction SilentlyContinue).DisplayName
+                If(!( $PresenceKey)) {
+                    # Alternative (seen KB2803754, 2802063 register here)
+                    $PresenceKey= (Get-ItemProperty -Path "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\$ID" -Name 'DisplayName' -ErrorAction SilentlyContinue).DisplayName
+                    If( !( $PresenceKey)){
+                        # Alternative (Office2010FilterPack SP1)
+                        $PresenceKey= (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\$ID" -Name 'DisplayName' -ErrorAction SilentlyContinue).DisplayName
+                    }
                 }
             }
         }
@@ -1268,8 +1306,15 @@ process {
     Function Package-Install () {
         Param ( [String]$PackageID, [string]$Package, [String]$FileName, [String]$OnlineURL, [array]$Arguments, [switch]$NoDownload)
 
-        Write-MyOutput "Processing $Package ($PackageID)"
-        $PresenceKey= Package-IsInstalled $PackageID
+        If( $PackageID) {
+            Write-MyOutput "Processing $Package ($PackageID)"
+            $PresenceKey= Package-IsInstalled $PackageID
+        }
+        Else {
+            # Just install, don't detect
+            Write-MyOutput "Processing $Package"
+            $PresenceKey= $true
+        }
         $RunFrom= $State['InstallPath']
         If( !( $PresenceKey )){
 
@@ -1306,7 +1351,14 @@ process {
             Write-MyOutput "Installing $Package from $RunFrom"
             $rval= StartWait-Process $RunFrom $FileName $Arguments
 
-            If( ( @(3010,-2145124329) -contains $rval) -or (Package-IsInstalled $PackageID))  {
+            If( $PackageID) {
+                $PresenceKey= Package-IsInstalled $PackageID
+            }
+            Else {
+                # Don't check post-installation
+                $PresenceKey= $true
+            }
+            If( ( @(3010,-2145124329) -contains $rval) -or $PresenceKey)  {
                 switch ( $rval) {
                     3010: {
                         Write-MyVerbose "Installation $Package successful, reboot required"
@@ -1433,6 +1485,42 @@ process {
         Else {
             Write-MyError 'KB2997355: Unable to locate Exchange install path'
         }
+    }
+
+    Function Exchange2019-FixCipherSuite {
+        # Taken from https://gallery.technet.microsoft.com/Update-Exchange-2019-RTM-a65d0325
+        $script:cipherSuite = @( 'TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384',
+                         'TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256',
+                         'TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384',
+                         'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256',
+                         'TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384',
+                         'TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256',
+                         'TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384',
+                         'TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256' );
+
+        # Vacate current list of suites
+        $suites = Get-TLSCipherSuite;
+
+        foreach ($suite in $suites)
+        {
+            if (Get-TlsCipherSuite -Name $suite.Name)
+            {
+                Disable-TlsCipherSuite -Name $suite.Name;
+            }
+        }
+
+        # Enable Cipher Suites
+        foreach($suite in $cipherSuite)
+        {
+            if ($suite -ne $null)
+            {
+               Enable-TlsCipherSuite -Name $suite;
+            }
+        }
+
+        #Configure Elliptic Curve Preference
+        Disable-TlsEccCurve "curve25519";
+        Enable-TlsEccCurve "NistP384" -Position 0
     }
 
     Function Get-NetVersionText( $NetVersion= 0) {
@@ -1611,7 +1699,7 @@ process {
         $sFormat.Alignment = [system.drawing.StringAlignment]::Center
         $brush1 = New-Object Drawing.SolidBrush ( [System.Drawing.Color]::FromArgb( $FG[0], $FG[1], $FG[2]))
         $sz1 = [system.windows.forms.textrenderer]::MeasureText( $text, $font1)
-        $rect1 = New-Object System.Drawing.RectangleF (0, ($sz1.Height), $SR.Width, $SR.Height)
+        $rect1 = New-Object System.Drawing.RectangleF (0, $sz1.Height, $SR.Width, $SR.Height)
         $image.DrawString( $text, $font1, $brush1, $rect1, $sFormat)
         Try {
             $bmp.Save( (Join-Path -Path $BmpPath -ChildPath 'bg.bmp'), [system.drawing.imaging.imageformat]::Bmp)
@@ -1671,7 +1759,7 @@ process {
             Write-MyOutput "Operating System is $($MajorOSVersion).$($MinorOSVersion)"
         }
         Else {
-            Write-MyError 'The following Operating Systems are supported: Windows Server 2008 R2 SP1+, Windows Server 2012, Windows Server 2012 R2, Windows Server 2016 (Exchange 2016 CU3 or later only) or Windows Server 2019 Preview (Exchange 2019 Preview only)'
+            Write-MyError 'The following Operating Systems are supported: Windows Server 2008 R2 SP1+, Windows Server 2012, Windows Server 2012 R2, Windows Server 2016 (Exchange 2016 CU3 or later only) or Windows Server 2019 (Exchange 2019)'
             Exit $ERR_UNEXPECTEDOS
         }
         Write-MyOutput ('Server core mode: {0}' -f (is-ServerCore))
@@ -1788,6 +1876,10 @@ process {
             Write-MyError 'Windows Server 2016 is only supported for Exchange Server 2016 CU3 and later.'
             Exit $ERR_UNEXPECTEDOS
         }
+        If( (is-MinimalBuild $SetupVersion $EX2019SETUPEXE_RTM) -and -not (is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL)  ) {
+            Write-MyError 'Exchange Server 2019 is only supported on Windows Server 2019.'
+            Exit $ERR_UNEXPECTEDOS
+        }
         If( $UseWMF3 -and (is-MinimalBuild $SetupVersion $EX2013SETUPEXE_SP1)) {
             Write-MyWarning 'WMF3 is not supported for Exchange Server 2013 SP1 and up'
         }
@@ -1868,8 +1960,14 @@ process {
         if( !($State['InstallEdge'])){
             Write-MyOutput 'Checking Exchange Forest Schema Version'
             If( $State['MajorSetupVersion'] -ge $EX2016_MAJOR) {
-                $minFFL= $EX2016_MINFORESTLEVEL
-                $minDFL= $EX2016_MINDOMAINLEVEL
+                If( $State['MajorSetupVersion'] -ge $EX2019_MAJOR) {
+                    $minFFL= $EX2019_MINFORESTLEVEL
+                    $minDFL= $EX2019_MINDOMAINLEVEL
+                }
+                Else {
+                    $minFFL= $EX2016_MINFORESTLEVEL
+                    $minDFL= $EX2016_MINDOMAINLEVEL
+                }
             }
             Else {
                 $minFFL= $EX2013_MINFORESTLEVEL
@@ -1915,24 +2013,36 @@ process {
             Write-MyOutput 'Checking Forest Functional Level'
             $FFL= Get-ForestFunctionalLevel
             Write-MyVerbose "Forest Functional Level=$FFL"
-            If( $FFL -lt $FOREST_LEVEL2003) {
-                Write-MyError 'Forest is not Functional Level 2003 or later'
-                Exit $ERR_ADFORESTLEVEL
-            }
-            Else {
-                If( $FFL -lt $FOREST_LEVEL2008R2) {
-                    If( ($MajorOSVersion -eq $WS2016_MAJOR ) -and -not (is-MinimalBuild $SetupVersion $EX2016SETUPEXE_CU7)) {
-                        Write-MyError ('Exchange Server 2016 CU7 and later requires Forest Functionality Level 2008R2 (is {0}).' -f $FFL)
-                        Exit $ERR_ADFORESTLEVEL
-                    }
-                    Else {
-                        Write-MyOutput 'Forest Functional Level is 2008R2 or later'
-                    }
+            If( $FFL -lt $FOREST_LEVEL2012R2) {
+                If( is-MinimalBuild $SetupVersion $EX2019SETUPEXE_RTM) {
+                    Write-MyError ('Exchange Server 2019 or later requires Forest Functionality Level 2012R2 (is {0}).' -f $FFL)
+                    Exit $ERR_ADFORESTLEVEL
                 }
                 Else {
-                    Write-MyOutput 'Forest Functional Level is 2003 or later'
+                    If( $FFL -lt $FOREST_LEVEL2008R2) {
+                        If( is-MinimalBuild $SetupVersion $EX2016SETUPEXE_CU7) {
+                            Write-MyError ('Exchange Server 2016 CU7 and later requires Forest Functionality Level 2008R2 (is {0}).' -f $FFL)
+                            Exit $ERR_ADFORESTLEVEL
+                        }
+                        Else {
+                            Write-MyOutput 'Forest Functional Level is 2012 R2 or later'
+                        }
+                    }
+                    Else {
+                        If( $FFL -lt $FOREST_LEVEL2003) {
+                            Write-MyError 'Forest is not Functional Level 2003 or later'
+                            Exit $ERR_ADFORESTLEVEL
+                        }
+                        Else {
+                            Write-MyOutput 'Forest Functional Level is 2003 or later'
+                        }
+                    }
                 }
             }
+            Else {
+                Write-MyOutput 'Forest Functional Level is 2012 R2 or later'
+            }
+
         }
         If( Get-PSExecutionPolicy) {
             # Referring to http://support.microsoft.com/kb/2810617/en
@@ -2076,87 +2186,138 @@ process {
 
     Function Configure-WindowsDefenderExclusions {
 
-        $SystemRoot= "$Env:SystemRoot"
-        $SystemDrive= "$Env:SystemDrive"
+        If( Get-Command -Cmdlet Add-MpPreference -ErrorAction SilentlyContinue) {
+            $SystemRoot= "$Env:SystemRoot"
+            $SystemDrive= "$Env:SystemDrive"
 
-        Write-MyOutput 'Configuring Windows Defender folder exclusions'
-        If( $State['TargetPath']) {
-            $InstallFolder= $State['TargetPath']
+            Write-MyOutput 'Configuring Windows Defender folder exclusions'
+            If( $State['TargetPath']) {
+                $InstallFolder= $State['TargetPath']
+            }
+            Else {
+                # TargetPath not specified, using default location
+                $InstallFolder= 'C:\Program Files\Microsoft\Exchange Server\V15'
+            }
+
+            $Locations= @(
+                "$SystemRoot|Cluster",
+                "$InstallFolder|ClientAccess\OAB,FIP-FS,GroupMetrics,Logging,Mailbox",
+                "$InstallFolder\TransportRoles\Data|IpFilter,Queue,SenderReputation,Temp",
+                "$InstallFolder\TransportRoles|Logs,Pickup,Replay",
+                "$InstallFolder\UnifiedMessaging|Grammars,Prompts,Temp,VoiceMail",
+                "$InstallFolder|Working\OleConverter",
+                "$SystemRoot\Microsoft.NET\Framework64\v4.0.30319|Temporary ASP.NET Files",
+                "$SystemDrive\InetPub\Temp|IIS Temporary Compressed Files",
+                "$SystemRoot|System32\InetSrv",
+                "$SystemDrive|Temp\OICE_*"
+            )
+
+            ForEach( $Location in $Locations) {
+                $Location
+                $Parts= $Location -split '\|'
+                $Items= $Parts[1] -split ','
+                ForEach( $Item in $Items) {
+                    $ExcludeLocation= Join-Path -Path $Parts[0] -ChildPath $Item
+                    Write-MyVerbose "WindowsDefender: Excluding location $ExcludeLocation"
+                    try {
+                        Add-MpPreference -ExclusionPath $ExcludeLocation -ErrorAction SilentlyContinue
+                    }
+                    catch {
+                        Write-MyWarning $_.Exception.Message
+                    }
+                }
+            }
+
+            Write-MyOutput 'Configuring Windows Defender exclusions: NodeRunner process'
+            $Processes= @(
+                "$InstallFolder\Bin|ComplianceAuditService.exe,Microsoft.Exchange.Directory.TopologyService.exe,Microsoft.Exchange.EdgeSyncSvc.exe,Microsoft.Exchange.Notifications.Broker.exe,Microsoft.Exchange.ProtectedServiceHost.exe,Microsoft.Exchange.RPCClientAccess.Service.exe,Microsoft.Exchange.Search.Service.exe,Microsoft.Exchange.Store.Service.exe,Microsoft.Exchange.Store.Worker.exe,MSExchangeCompliance.exe,MSExchangeDagMgmt.exe,MSExchangeDelivery.exe,MSExchangeFrontendTransport.exe,MSExchangeMailboxAssistants.exe,MSExchangeMailboxReplication.exe,MSExchangeRepl.exe,MSExchangeSubmission.exe,MSExchangeThrottling.exe,OleConverter.exe,UmService.exe,UmWorkerProcess.exe,wsbexchange.exe,EdgeTransport.exe,Microsoft.Exchange.AntispamUpdateSvc.exe,Microsoft.Exchange.Diagnostics.Service.exe,Microsoft.Exchange.Servicehost.exe,MSExchangeHMHost.exe,MSExchangeHMWorker.exe,MSExchangeTransport.exe,MSExchangeTransportLogSearch.exe",
+                "$InstallFolder\FIP-FS\Bin|fms.exe,ScanEngineTest.exe,ScanningProcess.exe,UpdateService.exe",
+                "$InstallFolder|Bin\Search\Ceres|HostController\HostControllerService.exe,Runtime\1.0\Noderunner.exe,ParserServer\ParserServer.exe",
+                "$SystemRoot\System32\InetSrv|inetinfo.exe,W3wp.exe",
+                "$InstallFolder|FrontEnd\PopImap|Microsoft.Exchange.Imap4.exe,Microsoft.Exchange.Pop3.exe",
+                "$InstallFolder|ClientAccess\PopImap\Microsoft.Exchange.Imap4service.exe,Microsoft.Exchange.Pop3service.exe",
+                "$InstallFolder|FrontEnd\CallRouter|Microsoft.Exchange.UM.CallRouter.exe",
+                "$InstallFolder|TransportRoles\agents\Hygiene\Microsoft.Exchange.ContentFilter.Wrapper.exe",
+                "$SystemRoot\System32\WindowsPowerShell\v1.0\Powershell.exe"
+            )
+
+            ForEach( $Process in $Processes) {
+                $Parts= $Process -split '\|'
+                $Items= $Parts[1] -split ','
+                ForEach( $Item in $Items) {
+                    $ExcludeProcess= Join-Path -Path $Parts[0] -ChildPath $Item
+                    Write-MyVerbose "WindowsDefender: Excluding process $ExcludeProcess"
+                    try {
+                        Add-MpPreference -ExclusionProcess $ExcludeProcess -ErrorAction SilentlyContinue
+                    }
+                    catch {
+                        Write-MyWarning $_.Exception.Message
+                    }
+                }
+            }
+
+            $Extensions= 'dsc', 'txt', 'cfg', 'grxml', 'lzx', 'config', 'chk', 'edb', 'jfm', 'jrs', 'log', 'que'
+            ForEach( $Extension in $Extensions) {
+                $ExcludeExtension= '.{0}' -f $Extension
+                Write-MyVerbose "WindowsDefender: Excluding extension $ExcludeExtension"
+                try {
+                    Add-MpPreference -ExclusionExtension $ExcludeExtension -ErrorAction SilentlyContinue
+                }
+                catch {
+                    Write-MyWarning $_.Exception.Message
+                }
+            }
         }
         Else {
-            # TargetPath not specified, using default location
-            $InstallFolder= 'C:\Program Files\Microsoft\Exchange Server\V15'
+            Write-MyVerbose 'Windows Defender not installed'
         }
+    }
 
-        $Locations= @(
-            "$SystemRoot|Cluster",
-            "$InstallFolder|ClientAccess\OAB,FIP-FS,GroupMetrics,Logging,Mailbox",
-            "$InstallFolder\TransportRoles\Data|IpFilter,Queue,SenderReputation,Temp",
-            "$InstallFolder\TransportRoles|Logs,Pickup,Replay",
-            "$InstallFolder\UnifiedMessaging|Grammars,Prompts,Temp,VoiceMail",
-            "$InstallFolder|Working\OleConverter",
-            "$SystemRoot\Microsoft.NET\Framework64\v4.0.30319|Temporary ASP.NET Files",
-            "$SystemDrive\InetPub\Temp|IIS Temporary Compressed Files",
-            "$SystemRoot|System32\InetSrv",
-            "$SystemDrive|Temp\OICE_*"
+    # Return location of mounted drive if ISO specified
+    Function Resolve-SourcePath {
+        Param ( 
+            [String]$SourceImage
         )
-
-        ForEach( $Location in $Locations) {
-            $Location
-            $Parts= $Location -split '\|'
-            $Items= $Parts[1] -split ','
-            ForEach( $Item in $Items) {
-                $ExcludeLocation= Join-Path -Path $Parts[0] -ChildPath $Item
-                Write-MyVerbose "WindowsDefender: Excluding location $ExcludeLocation"
-                try {
-                    Add-MpPreference -ExclusionPath $ExcludeLocation -ErrorAction SilentlyContinue
-                }
-                catch {
-                    Write-MyWarning $_.Exception.Message
-                }
+        $temp= Get-PSDrive
+        $disk= Get-DiskImage -ImagePath $SourceImage -ErrorAction SilentlyContinue
+        If( $disk) {
+            If( $disk.Attached) {
+                $vol= $disk | Get-Volume -ErrorAction SilentlyContinue
+                $Drive= $vol.DriveLetter
             }
+            Else {
+                $Drive= (Mount-DiskImage -ImagePath $SourceImage -PassThru | Get-Volume).DriveLetter
+            }
+            $SourcePath= '{0}:\' -f $Drive
+            Write-Verbose ('Mounted {0} on drive {1}' -f $SourceImage, $SourcePath)
+            return $SourcePath
         }
+        Else {
+            return $null
+        }
+    }
 
-        Write-MyOutput 'Configuring Windows Defender exclusions: NodeRunner process'
-        $Processes= @(
-            "$InstallFolder\Bin|ComplianceAuditService.exe,Microsoft.Exchange.Directory.TopologyService.exe,Microsoft.Exchange.EdgeSyncSvc.exe,Microsoft.Exchange.Notifications.Broker.exe,Microsoft.Exchange.ProtectedServiceHost.exe,Microsoft.Exchange.RPCClientAccess.Service.exe,Microsoft.Exchange.Search.Service.exe,Microsoft.Exchange.Store.Service.exe,Microsoft.Exchange.Store.Worker.exe,MSExchangeCompliance.exe,MSExchangeDagMgmt.exe,MSExchangeDelivery.exe,MSExchangeFrontendTransport.exe,MSExchangeMailboxAssistants.exe,MSExchangeMailboxReplication.exe,MSExchangeRepl.exe,MSExchangeSubmission.exe,MSExchangeThrottling.exe,OleConverter.exe,UmService.exe,UmWorkerProcess.exe,wsbexchange.exe,EdgeTransport.exe,Microsoft.Exchange.AntispamUpdateSvc.exe,Microsoft.Exchange.Diagnostics.Service.exe,Microsoft.Exchange.Servicehost.exe,MSExchangeHMHost.exe,MSExchangeHMWorker.exe,MSExchangeTransport.exe,MSExchangeTransportLogSearch.exe",
-            "$InstallFolder\FIP-FS\Bin|fms.exe,ScanEngineTest.exe,ScanningProcess.exe,UpdateService.exe",
-            "$InstallFolder|Bin\Search\Ceres|HostController\HostControllerService.exe,Runtime\1.0\Noderunner.exe,ParserServer\ParserServer.exe",
-            "$SystemRoot\System32\InetSrv|inetinfo.exe,W3wp.exe",
-            "$InstallFolder|FrontEnd\PopImap|Microsoft.Exchange.Imap4.exe,Microsoft.Exchange.Pop3.exe",
-            "$InstallFolder|ClientAccess\PopImap\Microsoft.Exchange.Imap4service.exe,Microsoft.Exchange.Pop3service.exe",
-            "$InstallFolder|FrontEnd\CallRouter|Microsoft.Exchange.UM.CallRouter.exe",
-            "$InstallFolder|TransportRoles\agents\Hygiene\Microsoft.Exchange.ContentFilter.Wrapper.exe",
-            "$SystemRoot\System32\WindowsPowerShell\v1.0\Powershell.exe"
+    Function Get-VCRuntime {
+        Param ( 
+            [String]$version
         )
+        Write-MyVerbose ('Looking for presence of Visual C++ v{0} Runtime' -f $version)
+        $RegPaths= @(
+            'HKLM:\Software\WOW6432Node\Microsoft\VisualStudio\{0}\VC\Runtimes\x64', 
+            'HKLM:\Software\Microsoft\VisualStudio\{0}\VC\Runtimes\x64',
+            'HKLM:\Software\WOW6432Node\Microsoft\VisualStudio\{0}\VC\VCRedist\x64', 
+            'HKLM:\Software\Microsoft\VisualStudio\{0}\VC\VCRedist\x64')
+        $presence= $false
+        ForEach( $RegPath in $RegPaths) {
 
-        ForEach( $Process in $Processes) {
-            $Parts= $Process -split '\|'
-            $Items= $Parts[1] -split ','
-            ForEach( $Item in $Items) {
-                $ExcludeProcess= Join-Path -Path $Parts[0] -ChildPath $Item
-                Write-MyVerbose "WindowsDefender: Excluding process $ExcludeProcess"
-                try {
-                    Add-MpPreference -ExclusionProcess $ExcludeProcess -ErrorAction SilentlyContinue
-                }
-                catch {
-                    Write-MyWarning $_.Exception.Message
-                }
+            $Key= (Get-ItemProperty -Path ($RegPath -f $version) -Name Installed -ErrorAction SilentlyContinue).Installed
+            If( $Key -eq 1) {
+                $build= (Get-ItemProperty -Path ($RegPath -f $version) -Name Version -ErrorAction SilentlyContinue).Version
+                Write-MyVerbose ('Found Visual C++ Runtime, build {0}' -f $build)
+                $presence= $true
             }
         }
-
-        $Extensions= 'dsc', 'txt', 'cfg', 'grxml', 'lzx', 'config', 'chk', 'edb', 'jfm', 'jrs', 'log', 'que'
-        ForEach( $Extension in $Extensions) {
-            $ExcludeExtension= '.{0}' -f $Extension
-            Write-MyVerbose "WindowsDefender: Excluding extension $ExcludeExtension"
-            try {
-                Add-MpPreference -ExclusionExtension $ExcludeExtension -ErrorAction SilentlyContinue
-            }
-            catch {
-                Write-MyWarning $_.Exception.Message
-            }
-        }
-
+        return $presence
     }
 
     ########################################
@@ -2187,7 +2348,7 @@ process {
     Write-Output ('Running on OS build {0}' -f $FullOSVersion)
 
     $WPAssembliesLoaded= Load-WallpaperAssemblies
-
+    
     If(! $State.Count) {
         # No state, initialize settings from parameters
         If( $($PsCmdlet.ParameterSetName) -eq "AutoPilot") {
@@ -2202,25 +2363,34 @@ process {
         $State["InstallMDBDBPath"]= $MDBDBPath
         $State["InstallMDBLogPath"]= $MDBLogPath
         $State["InstallMDBName"]= $MDBName
-        $State["InstallPath"]= $InstallPath
         $State["InstallPhase"]= 0
         $State["OrganizationName"]= $Organization
         $State["AdminAccount"]= $Credentials.UserName
         $State["AdminPassword"]= ($Credentials.Password | ConvertFrom-SecureString -ErrorAction SilentlyContinue)
-        $State["SourcePath"]= $SourcePath
+        If( Get-DiskImage -ImagePath $SourcePath -ErrorAction SilentlyContinue) {
+            $State['SourceImage']= $SourcePath
+            $State["SourcePath"]= Resolve-SourcePath -SourceImage $SourcePath
+        }
+        Else {
+            $State['SourceImage']= $null
+            $State["SourcePath"]= $SourcePath
+        }
         $State["SetupVersion"]= ( File-DetectVersion "$($State["SourcePath"])\setup.exe")
         $State["TargetPath"]= $TargetPath
         $State["AutoPilot"]= $AutoPilot
         $State["IncludeFixes"]= $IncludeFixes
         $State["NoSetup"]= $NoSetup
         $State["Recover"]= $Recover
-        $State["Upgrade"]= $False
+        $State["Upgrade"]= $false
         $State["UseWMF3"]= $UseWMF3
         $State["NoNet461"]= $NoNet461
         $State["NoNet471"]= $NoNet471
+        $State["NoNet472"]= $NoNet472
         $State["Install461"]= $False
         $State["Install462"]= $False
         $State["Install471"]= $False
+        $State["Install472"]= $False
+        $State["VCRedist2012"]= $False
         $State["VCRedist2013"]= $False
         $State["DisableSSL3"]= $DisableSSL3
         $State["DisableRC4"]= $DisableRC4
@@ -2228,9 +2398,9 @@ process {
         $State["SCP"]= $SCP
         $State["Lock"]= $Lock
         $State["EdgeDNSSuffix"]= $EdgeDNSSuffix
+        $State["InstallPath"]= $InstallPath
         $State["TranscriptFile"]= "$($State["InstallPath"])\$($env:computerName)_$($ScriptName)_$(Get-Date -format "yyyyMMddHHmmss").log"
-    
-        
+            
         If( $WPAssembliesLoaded) {
             $temp= Get-WallPaper
             $State['Wallpaper']= $temp.Wallpaper
@@ -2242,6 +2412,13 @@ process {
 
         $State["Verbose"]= $VerbosePreference
 
+    }
+    Else {
+        # Run from saved parameters
+        If( $State['SourceImage']) {
+            # Mount ISO image, and set SourcePath to mounted location
+            $State["SourcePath"]= Resolve-SourcePath -SourceImage $State['SourceImage']
+        }
     }
 
     If( $State["Lock"] ) {
@@ -2318,30 +2495,35 @@ process {
                             ($State["MajorSetupVersion"] -eq $EX2013_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2013SETUPEXE_CU19))) {
                             If( ($State["MajorSetupVersion"] -ge $EX2016_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2016SETUPEXE_CU10)) -or
                                 ($State["MajorSetupVersion"] -eq $EX2013_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2013SETUPEXE_CU20))) {
-                                If( $State["NoNet471"]) {
-                                    Write-MyWarning "Ignoring NoNet471 switch, .NET Framework 4.7.1 is required for this Exchange build"
-                                    $State["NoNet471"]= $false
+                                If( ($State["MajorSetupVersion"] -ge $EX2016_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2016SETUPEXE_CU11)) -or
+                                    ($State["MajorSetupVersion"] -eq $EX2013_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2013SETUPEXE_CU21))) {
+                                    If( $State["MajorSetupVersion"] -eq $EX2016_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2016SETUPEXE_CU11)) {
+                                        $State["VCRedist2012"]= $True
+                                    }
+                                    $State["Install472"]= $True
+                                }
+                                Else {
+                                    If( $State["NoNet471"]) {
+                                        Write-MyWarning "Ignoring NoNet471 switch, .NET Framework 4.7.1 is required for this Exchange build"
+                                        $State["NoNet471"]= $false
+                                    }
                                 }
                                 # Set to install the Ex2016CU10+/Ex2013CU20+ required VC++ 2013 runtime
                                 $State["VCRedist2013"]= $True
                             }
-                            If( $State["NoNet471"]) {
-                                Write-MyOutput ".NET Framework 4.7.1 supported, but NoNet471 specified - will use .NET Framework 4.6.2"
-                                $State["Install462"]= $True
+                            If( $State['Install472']) {
+                                # Life is good
                             }
                             Else {
-                                Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) found, will use .NET Framework 4.7.1"
-                                $State["Install471"]= $True
+                                If( $State["NoNet471"]) {
+                                    Write-MyOutput ".NET Framework 4.7.1 supported, but NoNet471 specified - will use .NET Framework 4.6.2"
+                                    $State["Install462"]= $True
+                                }
+                                Else {
+                                    Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) found, will use .NET Framework 4.7.1"
+                                    $State["Install471"]= $True
+                                }
                             }
-                        }
-                    }
-                    Else {
-                        If( $State["NoNet461"]) {
-                            Write-MyOutput ".NET Framework 4.6.1 supported, but NoNet461 specified - will use .NET Framework 4.5.2"
-                        }
-                        Else {
-                            Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) found, will use .NET Framework 4.6.x"
-                            $State["Install461"]= $True
                         }
                     }
                 }
@@ -2377,73 +2559,85 @@ process {
             Write-MyOutput "Installing BITS module"
             Import-Module BITSTransfer
 
-            If( $State["Install461"] -or $State["Install462"] -or $State['Install471']) {
-                # Check .NET FrameWork 4.7.1 installed
-                If( $State["Install471"]) {
-                    Remove-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
-                    Set-NETFrameworkInstallBlock '4.7.2' 'Preview' '472'
-                    If( (Get-NETVersion) -lt $NETVERSION_471) {
-                        Package-Install "KB4033342" "Microsoft .NET Framework 4.7.1" "NDP471-KB4033342-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/9/E/6/9E63300C-0941-4B45-A0EC-0008F96DD480/NDP471-KB4033342-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
+            If( $State["Install461"] -or $State["Install462"] -or $State['Install471'] -or $State['Install472']) {
+                # Check .NET FrameWork 4.7.2 needs to be installed
+                If( $State["Install472"]) {
+                    Remove-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
+                    If( (Get-NETVersion) -lt $NETVERSION_472) {
+                        Package-Install "KB4054530" "Microsoft .NET Framework 4.7.2" "NDP472-KB4054530-x86-x64-AllOS-ENU" "https://download.microsoft.com/download/6/E/4/6E48E8AB-DC00-419E-9704-06DD46E5F81D/NDP472-KB4054530-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
                     }
                     Else {
-                        Write-MyOutput ".NET Framework 4.7.1 or later detected"
+                        Write-MyOutput ".NET Framework 4.7.2 or later detected"
                     }
                 }
                 Else {
-                    If( -not $MajorOSVersion -eq $WS2016_MAJOR) {
-                        Write-MyWarning 'Windows Server 2016 comes with .NET Framework 4.6.2, no updates required'
-                    }
-                    Else {
-                        # Check .NET FrameWork 4.6.x or later installed
-                        If( $State["Install461"]) {
-                            Remove-NETFrameworkInstallBlock '4.6.1' 'KB3133990' '461'
-                            Set-NETFrameworkInstallBlock '4.7' 'KB4024204' '47'
-                            Set-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
-                            Set-NETFrameworkInstallBlock '4.7.2' 'Preview' '472'
-                            If( (Get-NETVersion) -lt $NETVERSION_461) {
-                                Package-Install "KB3102467" "Microsoft .NET Framework 4.6.1" "NDP461-KB3102436-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/E/4/1/E4173890-A24A-4936-9FC9-AF930FE3FA40/NDP461-KB3102436-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
-                            }
-                            Else {
-                                Write-MyOutput ".NET Framework 4.6.1 or later detected"
-                            }
+                    # Check .NET FrameWork 4.7.1 needs to be installed
+                    If( $State["Install471"]) {
+                        Remove-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
+                        Set-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
+                        If( (Get-NETVersion) -lt $NETVERSION_471) {
+                            Package-Install "KB4033342" "Microsoft .NET Framework 4.7.1" "NDP471-KB4033342-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/9/E/6/9E63300C-0941-4B45-A0EC-0008F96DD480/NDP471-KB4033342-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
                         }
                         Else {
-                            # Install462
-                            Remove-NETFrameworkInstallBlock '4.6.2', 'KB3102436' '462'
-                            Set-NETFrameworkInstallBlock '4.7' 'KB4024204' '47'
-                            Set-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
-                            Set-NETFrameworkInstallBlock '4.7.2' 'Preview' '472'
-                            If( (Get-NETVersion) -lt $NETVERSION_462) {
-                                Package-Install "KB3102436" "Microsoft .NET Framework 4.6.2" "NDP462-KB3151800-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/F/9/4/F942F07D-F26F-4F30-B4E3-EBD54FABA377/NDP462-KB3151800-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
+                            Write-MyOutput ".NET Framework 4.7.1 or later detected"
+                        }
+                    }
+                    Else {
+                        If( -not $MajorOSVersion -eq $WS2016_MAJOR) {
+                            Write-MyWarning 'Windows Server 2016 comes with .NET Framework 4.6.2, no updates required'
+                        }
+                        Else {
+                            # Check .NET FrameWork 4.6.x or later needs to be installed
+                            If( $State["Install461"]) {
+                                Remove-NETFrameworkInstallBlock '4.6.1' 'KB3133990' '461'
+                                Set-NETFrameworkInstallBlock '4.7' 'KB4024204' '47'
+                                Set-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
+                                Set-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
+                                If( (Get-NETVersion) -lt $NETVERSION_461) {
+                                    Package-Install "KB3102467" "Microsoft .NET Framework 4.6.1" "NDP461-KB3102436-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/E/4/1/E4173890-A24A-4936-9FC9-AF930FE3FA40/NDP461-KB3102436-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
+                                }
+                                Else {
+                                    Write-MyOutput ".NET Framework 4.6.1 or later detected"
+                                }
                             }
                             Else {
-                                Write-MyOutput ".NET Framework 4.6.2 or later detected"
+                                # Install462
+                                Remove-NETFrameworkInstallBlock '4.6.2', 'KB3102436' '462'
+                                Set-NETFrameworkInstallBlock '4.7' 'KB4024204' '47'
+                                Set-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
+                                Set-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
+                                If( (Get-NETVersion) -lt $NETVERSION_462) {
+                                    Package-Install "KB3102436" "Microsoft .NET Framework 4.6.2" "NDP462-KB3151800-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/F/9/4/F942F07D-F26F-4F30-B4E3-EBD54FABA377/NDP462-KB3151800-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
+                                }
+                                Else {
+                                    Write-MyOutput ".NET Framework 4.6.2 or later detected"
+                                }
                             }
-                        }
-                        # For .NET 4.6.x or later, install required hotfixes: KB3146716 for WS2008/WS2008R2, KB3146714 for WS2012, and KB3146715 for WS2012R2
-                        Write-MyOutput "Checking applicable .NET Framework 4.6.x hotfixes"
-                        Switch( $MajorOSVersion) {
-                            $WS2008R2_MAJOR {
-                                Package-Install "KB3146716" "Hotfix rollup 3146716 for the .NET Framework 4.6 and 4.6.1 in Windows" "NDP461-KB3146716-x86-x64-ENU.exe" "http://download.microsoft.com/download/E/F/1/EF1FB34B-58CB-4568-85EC-FA359387E328/NDP461-KB3146716-x86-x64-ENU.exe" ("/quiet", "/norestart")
-                                break
-                            }
-                            $WS2012_MAJOR {
-                                Package-Install "KB3146714" "Hotfix rollup 3146714 for the .NET Framework 4.6 and 4.6.1 in Windows" "Windows8-RT-KB3146714-x64.msu" "http://download.microsoft.com/download/E/F/1/EF1FB34B-58CB-4568-85EC-FA359387E328/Windows8-RT-KB3146714-x64.msu" ("/quiet", "/norestart")
-                                break
-                            }
-                            $WS2012R2_MAJOR {
-                                Package-Install "KB3146715" "Hotfix rollup 3146715 for the .NET Framework 4.6 and 4.6.1 in Windows" "Windows8.1-KB3146715-x64.msu" "http://download.microsoft.com/download/E/F/1/EF1FB34B-58CB-4568-85EC-FA359387E328/Windows8.1-KB3146715-x64.msu" ("/quiet", "/norestart")
-                                break
-                            }
-                            $WS2016_MAJOR {
-                                break
+                            # For .NET 4.6.x or later, install required hotfixes: KB3146716 for WS2008/WS2008R2, KB3146714 for WS2012, and KB3146715 for WS2012R2
+                            Write-MyOutput "Checking applicable .NET Framework 4.6.x hotfixes"
+                            Switch( $MajorOSVersion) {
+                                $WS2008R2_MAJOR {
+                                    Package-Install "KB3146716" "Hotfix rollup 3146716 for the .NET Framework 4.6 and 4.6.1 in Windows" "NDP461-KB3146716-x86-x64-ENU.exe" "http://download.microsoft.com/download/E/F/1/EF1FB34B-58CB-4568-85EC-FA359387E328/NDP461-KB3146716-x86-x64-ENU.exe" ("/quiet", "/norestart")
+                                    break
+                                }
+                                $WS2012_MAJOR {
+                                    Package-Install "KB3146714" "Hotfix rollup 3146714 for the .NET Framework 4.6 and 4.6.1 in Windows" "Windows8-RT-KB3146714-x64.msu" "http://download.microsoft.com/download/E/F/1/EF1FB34B-58CB-4568-85EC-FA359387E328/Windows8-RT-KB3146714-x64.msu" ("/quiet", "/norestart")
+                                    break
+                                }
+                                $WS2012R2_MAJOR {
+                                    Package-Install "KB3146715" "Hotfix rollup 3146715 for the .NET Framework 4.6 and 4.6.1 in Windows" "Windows8.1-KB3146715-x64.msu" "http://download.microsoft.com/download/E/F/1/EF1FB34B-58CB-4568-85EC-FA359387E328/Windows8.1-KB3146715-x64.msu" ("/quiet", "/norestart")
+                                    break
+                                }
+                                $WS2016_MAJOR {
+                                    break
+                                }
                             }
                         }
                     }
                 }
             }
             Else {
-                Set-NETFrameworkInstallBlock '4.7.2' 'Preview' '472'
+                Set-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
                 Set-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
                 Set-NETFrameworkInstallBlock '4.7' 'KB4024204' '47'
                 Set-NETFrameworkInstallBlock '4.6.2' 'KB3102436' '462'
@@ -2519,22 +2713,28 @@ process {
                 }
             }
 
-            # Check if need to install VC++ Runtime 2013
-            If ( $State["VCRedist2013"] ) {
-                Package-Install "{A749D8E6-B613-3BE3-8F5F-045C84EBA29B}" "Visual C++ 2013 Redistributable" "vcredist_x64.exe" "https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91DA-3737CD5CD6E3/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
+            # Check if need to install VC++ Runtimes
+            if( ($State['InstallEdge'])){
+                If( -not (Get-VCRuntime -version '11.0') -and $State["VCRedist2012"] ) {
+                    Package-Install "" "Visual C++ 2012 Redistributable" "vcredist_x64_2012.exe" "https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
+                }
+            }
+
+            If( -not (Get-VCRuntime -version '12.0') -and $State["VCRedist2013"] ) {
+                Package-Install "" "Visual C++ 2013 Redistributable" "vcredist_x64_2013.exe" "https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91DA-3737CD5CD6E3/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
             }
         }
 
         3 {
             if( !($State['InstallEdge'])){
-            Write-MyOutput "Installing Exchange prerequisites (continued)"
+                Write-MyOutput "Installing Exchange prerequisites (continued)"
                 If( (is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL) -and (is-ServerCore) ) {
                     Package-Install "{41D635FE-4F9D-47F7-8230-9B29D6D42D31}" "Unified Communications Managed API 4.0 Runtime (Core)" "Setup.exe" (Join-Path -Path $State['SourcePath'] -ChildPath 'UcmaRedist\Setup.exe') ("/passive", "/norestart") -NoDownload
                 }
                 Else {
                     Package-Install "{41D635FE-4F9D-47F7-8230-9B29D6D42D31}" "Unified Communications Managed API 4.0 Runtime" "UcmaRuntimeSetup.exe" "http://download.microsoft.com/download/2/C/4/2C47A5C1-A1F3-4843-B9FE-84C0032C61EC/UcmaRuntimeSetup.exe" ("/passive", "/norestart")
                 }
-            }else{
+            } else {
                 Write-MyOutput 'Setting Primary DNS Suffix'
                 Set-EdgeDNSSuffix -DNSSuffix $State['EdgeDNSSuffix']
             }
@@ -2634,9 +2834,17 @@ process {
                     Exchange2013-KB2997355-FixIt
                     break
                 }
+                $EX2019SETUPEXE_RTM {
+                    Exchange2019-FixCipherSuite
+                }
                 default {
 
                 }
+
+              }
+              If( ($State["MajorSetupVersion"] -eq $EX2016_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2016SETUPEXE_CU10)) -or
+                  ($State["MajorSetupVersion"] -eq $EX2013_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2013SETUPEXE_CU20))) {
+                  Package-Install "{1D8E6291-B0D5-35EC-8441-6616F567A0F7}" "Microsoft Visual C++ 2010 Service Pack 1 Redistributable Package MFC Security Update" "vcredist_x64_2010.exe" "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
               }
             }
         }
@@ -2656,6 +2864,22 @@ process {
                 Set-WallPaper -Path $State['Wallpaper'] -Style $State['WallpaperStyle']
             }
 
+            # Warmup IIS
+            $web = New-Object Net.WebClient
+            # To ignore self-signed cert warnings
+            [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+            'OWA', 'ECP', 'EWS', 'Autodiscover', 'Microsoft-Server-ActiveSync', 'OAB', 'mapi', 'rpc' | ForEach-Object {
+                $url = 'https://localhost/{0}/healthcheck.htm' -f $_
+                Try {
+                    $output = $web.DownloadString($url)
+                    Write-MyOutput ('Healthcheck {0}: {1}' -f $url, ($output -split '<')[0])
+                }
+                Catch {
+                    Write-MyWarning ('Healthcheck {0}: {1}' -f $url, 'ERR')
+                }
+            }
+            [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $null
+
             Enable-UAC
             Enable-IEESC
             Write-MyOutput "Setup finished - We're good to go."
@@ -2670,6 +2894,9 @@ process {
     $State["LastSuccessfulPhase"]= $State["InstallPhase"]
     Enable-OpenFileSecurityWarning
     Save-State $State
+    If( $State['SourceImage']) {
+        Dismount-DiskImage -ImagePath $State['SourceImage']
+    }
 
     If( $State["AutoPilot"]) {
         If( $State["InstallPhase"] -lt $MAX_PHASE) {
