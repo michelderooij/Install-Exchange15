@@ -691,12 +691,12 @@ process {
     Function Check-Package () {
         Param ( [String]$Package, [String]$URL, [String]$FileName, [String]$InstallPath)
         $res= $true
-        If( !( Test-Path "$InstallPath\$FileName")) {
+        If( !( Test-Path $(Join-Path $InstallPath $Filename))) {
             If( $URL) {
                 Write-MyOutput "Package $Package not found, downloading to $FileName"
                 Try{
                     Write-MyVerbose "Source: $URL"
-                    Start-BitsTransfer -Source $URL -Destination "$InstallPath\$FileName"
+                    Start-BitsTransfer -Source $URL -Destination $(Join-Path $InstallPath $Filename)
                 }
                 Catch{
                     Write-MyError 'Problem downloading package from URL'
@@ -901,9 +901,9 @@ process {
 
     Function StartWait-Extract ( $FilePath, $FileName) {
         Write-MyVerbose "Extracting $FilePath\$FileName to $FilePath"
-        If( Test-Path "$FilePath\$FileName") {
-            $TempNam= "$FilePath\$FileName.zip"
-            Copy-Item "$FilePath\$FileName" "$TempNam" -Force
+        If( Test-Path $(Join-Path $FilePath $Filename)) {
+            $TempNam= "$(Join-Path $FilePath $Filename).zip"
+            Copy-Item $(Join-Path $FilePath $Filename) "$TempNam" -Force
             $shellApplication = new-object -com shell.application
             $zipPackage = $shellApplication.NameSpace( $TempNam)
             $destFolder = $shellApplication.NameSpace( $FilePath)
@@ -1063,7 +1063,7 @@ process {
         Write-MyVerbose 'Loading Exchange PowerShell module'
         If( -not ( Get-Command Connect-ExchangeServer -ErrorAction SilentlyContinue)) {
             $SetupPath= (Get-ItemProperty -Path $EXCHANGEINSTALLKEY -Name MsiInstallPath -ErrorAction SilentlyContinue).MsiInstallPath
-            If( ($State['InstallEdge'] -eq $true -and $SetupPath -and (Test-Path "$SetupPath\bin\Exchange.ps1")) -or ($State['InstallEdge'] -eq $false -and $SetupPath -and (Test-Path "$SetupPath\bin\RemoteExchange.ps1"))) {
+            If( ($State['InstallEdge'] -eq $true -and $SetupPath -and (Test-Path $(Join-Path $SetupPath "\bin\Exchange.ps1"))) -or ($State['InstallEdge'] -eq $false -and $SetupPath -and (Test-Path $(Join-Path $SetupPath "\bin\RemoteExchange.ps1")))) {
                 If( $State['InstallEdge']) {
                     Add-PSSnapin Microsoft.Exchange.Management.PowerShell.E2010
                     . "$SetupPath\bin\Exchange.ps1" | Out-Null
@@ -1761,12 +1761,12 @@ process {
             }
         }
         Write-MyOutput 'Checking if we can access Exchange setup ..'
-        If(! (Test-Path "$($State['SourcePath'])setup.exe")) {
+        If(! (Test-Path $(Join-Path $(State['SourcePath']) "setup.exe"))) {
             Write-MyError "Can't find Exchange setup at $($State['SourcePath'])"
             Exit $ERR_MISSINGEXCHANGESETUP
         }
         Else {
-            Write-MyOutput "Exchange setup located at $($State['SourcePath'])setup.exe"
+            Write-MyOutput "Exchange setup located at $(Join-Path $(State['SourcePath']) "setup.exe")"
         }
 
         $SetupVersion= File-DetectVersion "$($State['SourcePath'])\Setup\ServerRoles\Common\ExSetup.exe"
