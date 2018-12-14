@@ -482,7 +482,7 @@ param(
 
 process {
 
-    $ScriptVersion                  = '3.00.0'
+    $ScriptVersion                  = '3.00.2'
 
     $ERR_OK                         = 0
     $ERR_PROBLEMADPREPARE	    = 1001
