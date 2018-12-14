@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.00.1, October 26rd, 2018
+    Version 3.00.2, December 14th, 2018
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier and everyone else who provided feedback or contributed in other ways.
@@ -221,6 +221,7 @@
     3.00.0  Added Exchange 2019 support
             Rewritten VC++ detection
     3.00.1  Integrated Exchange 2019 RTM Cipher correction
+    3.00.2  Replaced filename constructs with Join-Path
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
