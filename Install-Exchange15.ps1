@@ -222,6 +222,7 @@
             Rewritten VC++ detection
     3.00.1  Integrated Exchange 2019 RTM Cipher correction
     3.00.2  Replaced filename constructs with Join-Path
+            Fixed typo in installing KB4054530
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -2565,7 +2566,7 @@ process {
                 If( $State["Install472"]) {
                     Remove-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
                     If( (Get-NETVersion) -lt $NETVERSION_472) {
-                        Package-Install "KB4054530" "Microsoft .NET Framework 4.7.2" "NDP472-KB4054530-x86-x64-AllOS-ENU" "https://download.microsoft.com/download/6/E/4/6E48E8AB-DC00-419E-9704-06DD46E5F81D/NDP472-KB4054530-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
+                        Package-Install "KB4054530" "Microsoft .NET Framework 4.7.2" "NDP472-KB4054530-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/6/E/4/6E48E8AB-DC00-419E-9704-06DD46E5F81D/NDP472-KB4054530-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
                     }
                     Else {
                         Write-MyOutput ".NET Framework 4.7.2 or later detected"
