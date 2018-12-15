@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.00.2, December 14th, 2018
+    Version 3.00.3, December 15th, 2018
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier and everyone else who provided feedback or contributed in other ways.
@@ -223,6 +223,7 @@
     3.00.1  Integrated Exchange 2019 RTM Cipher correction
     3.00.2  Replaced filename constructs with Join-Path
             Fixed typo in installing KB4054530
+    3.00.3  Fixed typos in Join-Path constructs
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -1851,12 +1852,12 @@ process {
             }
         }
         Write-MyOutput 'Checking if we can access Exchange setup ..'
-        If(! (Test-Path $(Join-Path $(State['SourcePath']) "setup.exe"))) {
+        If(! (Test-Path $(Join-Path $($State['SourcePath']) "setup.exe"))) {
             Write-MyError "Can't find Exchange setup at $($State['SourcePath'])"
             Exit $ERR_MISSINGEXCHANGESETUP
         }
         Else {
-            Write-MyOutput "Exchange setup located at $(Join-Path $(State['SourcePath']) "setup.exe")"
+            Write-MyOutput "Exchange setup located at $(Join-Path $($State['SourcePath']) "setup.exe")"
         }
 
         $SetupVersion= File-DetectVersion "$($State['SourcePath'])\Setup\ServerRoles\Common\ExSetup.exe"
