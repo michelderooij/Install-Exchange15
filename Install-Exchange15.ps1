@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.00.3, December 15th, 2018
+    Version 3.00.4, March 1st, 2019
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier and everyone else who provided feedback or contributed in other ways.
@@ -224,6 +224,7 @@
     3.00.2  Replaced filename constructs with Join-Path
             Fixed typo in installing KB4054530
     3.00.3  Fixed typos in Join-Path constructs
+    3.00.4  Fixed bug in Package-Install
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -1316,7 +1317,7 @@ process {
         Else {
             # Just install, don't detect
             Write-MyOutput "Processing $Package"
-            $PresenceKey= $true
+            $PresenceKey= $false
         }
         $RunFrom= $State['InstallPath']
         If( !( $PresenceKey )){
