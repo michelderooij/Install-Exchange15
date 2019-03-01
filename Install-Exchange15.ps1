@@ -11,7 +11,7 @@
     Version 3.00.4, March 1st, 2019
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
-    Pavel Andreev, Rob Whaley, Simon Poirier and everyone else who provided feedback or contributed in other ways.
+    Pavel Andreev, Rob Whaley, Simon Poirier, Brenle and everyone else who provided feedback or contributed in other ways.
 
     .DESCRIPTION
     This script can install Exchange 2013/2016/2019 Preview prerequisites, optionally create the Exchange
