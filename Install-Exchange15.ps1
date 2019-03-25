@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.00.4, March 1st, 2019
+    Version 3.01.0, March 24th, 2019
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle and everyone else who provided feedback or contributed in other ways.
@@ -31,7 +31,7 @@
         - Windows Server 2012
         - Windows Server 2012 R2
         - Windows Server 2016 (Exchange 2016 CU3+ only)
-        - Windows Server 2019 Preview (Desktop or Core, for Exchange 2019 Preview)
+        - Windows Server 2019 (Desktop or Core, for Exchange 2019)
     - Domain-joined system (Except for Edge)
     - "AutoPilot" mode requires account with elevated administrator privileges
     - When you let the script prepare AD, the account needs proper permissions.
@@ -225,6 +225,13 @@
             Fixed typo in installing KB4054530
     3.00.3  Fixed typos in Join-Path constructs
     3.00.4  Fixed bug in Package-Install
+    3.01.0  Added support for Exchange 2019CU1
+            Added support for Exchange 2016CU12
+            Added support for Exchange 2013CU22
+            Fixed Hotfix KB3041832 url
+            Fixed NoSetup Mode/EmptyRoles problem
+            Added skip Health Monitor checks for InstallEdge
+            Fixed potential Exchange version misreporting
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -485,10 +492,10 @@ param(
 
 process {
 
-    $ScriptVersion                  = '3.00.2'
+    $ScriptVersion                  = '3.01.0'
 
     $ERR_OK                         = 0
-    $ERR_PROBLEMADPREPARE	    = 1001
+    $ERR_PROBLEMADPREPARE	        = 1001
     $ERR_UNEXPECTEDOS               = 1002
     $ERR_UNEXPTECTEDPHASE           = 1003
     $ERR_PROBLEMADDINGFEATURE	    = 1004
@@ -563,6 +570,7 @@ process {
     $EX2013SETUPEXE_CU19            = '15.00.1365.001'
     $EX2013SETUPEXE_CU20            = '15.00.1367.003'
     $EX2013SETUPEXE_CU21            = '15.00.1395.004'
+    $EX2013SETUPEXE_CU22            = '15.00.1473.003'
     $EX2016SETUPEXE_PRE             = '15.01.0225.016'
     $EX2016SETUPEXE_RTM             = '15.01.0225.042'
     $EX2016SETUPEXE_CU1             = '15.01.0396.030'
@@ -576,8 +584,10 @@ process {
     $EX2016SETUPEXE_CU9             = '15.01.1466.003'
     $EX2016SETUPEXE_CU10            = '15.01.1531.003'
     $EX2016SETUPEXE_CU11            = '15.01.1591.008'
+    $EX2016SETUPEXE_CU12            = '15.01.1713.005'
     $EX2019SETUPEXE_PRE             = '15.02.0196.000'
     $EX2019SETUPEXE_RTM             = '15.02.0221.012'
+    $EX2019SETUPEXE_CU1             = '15.02.0330.005'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
@@ -618,7 +628,7 @@ process {
 
 
     Function Setup-TextVersion( $FileVersion) {
-      $Versions= @{
+      $Versions= [Ordered]@{
         $EX2013SETUPEXE_RTM= 'Exchange Server 2013 RTM';
         $EX2013SETUPEXE_CU1= 'Exchange Server 2013 Cumulative Update 1';
         $EX2013SETUPEXE_CU2= 'Exchange Server 2013 Cumulative Update 2';
@@ -641,6 +651,7 @@ process {
         $EX2013SETUPEXE_CU19= 'Exchange Server 2013 Cumulative Update 19';
         $EX2013SETUPEXE_CU20= 'Exchange Server 2013 Cumulative Update 20';
         $EX2013SETUPEXE_CU21= 'Exchange Server 2013 Cumulative Update 21';
+        $EX2013SETUPEXE_CU22= 'Exchange Server 2013 Cumulative Update 22';
         $EX2016SETUPEXE_PRE= 'Exchange Server 2016 Preview';
         $EX2016SETUPEXE_RTM= 'Exchange Server 2016 RTM';
         $EX2016SETUPEXE_CU1= 'Exchange Server 2016 Cumulative Update 1';
@@ -654,13 +665,15 @@ process {
         $EX2016SETUPEXE_CU9= 'Exchange Server 2016 Cumulative Update 9';
         $EX2016SETUPEXE_CU10= 'Exchange Server 2016 Cumulative Update 10';
         $EX2016SETUPEXE_CU11= 'Exchange Server 2016 Cumulative Update 11';
+        $EX2016SETUPEXE_CU12= 'Exchange Server 2016 Cumulative Update 12';
         $EX2019SETUPEXE_PRE= 'Exchange Server 2019 Public Preview';
         $EX2019SETUPEXE_RTM= 'Exchange Server 2019 RTM';
+        $EX2019SETUPEXE_CU1= 'Exchange Server 2019 CU1';
       }
       $res= "Unknown version (build $FileVersion)"
-      $Versions.GetEnumerator() | ForEach {
-          If( is-MinimalBuild $_.Name $FileVersion) {
-              $res= '{0} (build {1})' -f $_.Value, $FileVersion
+      ForEach( $Version in $Versions.GetEnumerator() ) {
+          If( is-MinimalBuild -BuildNumber $FileVersion -ReferenceBuildNumber $Version.Name ) {
+              $res= '{0} (build {1})' -f $Version.Value, $FileVersion
           }
       }
       return $res
@@ -1147,24 +1160,26 @@ process {
                 $Params= '/mode:Upgrade', '/IAcceptExchangeServerLicenseTerms'
             }
             Else {
-
                 $roles= @()
                 If( $State['InstallEdge']) {
                     $roles = 'EdgeTransport'
                 }else{
-                    If( $State['InstallMailbox']) {
-                        $roles+= 'Mailbox'
+                    If( $State['MajorSetupVersion'] -ge $EX2016_MAJOR) {
+                        $roles= 'Mailbox'
                     }
-                    If( $State['InstallCAS']) {
-                        If( $State['MajorSetupVersion'] -ge $EX2016_MAJOR) {
-                            Write-MyWarning 'Ignoring InstallCAS option for Exchange 2016'
+                    Else {
+                        If( $State['InstallMailbox']) {
+                            $roles+= 'Mailbox'
                         }
-                        Else {
-                           $roles+= 'ClientAccess'
+                        If( $State['InstallCAS']) {
+                            $roles+= 'ClientAccess'
                         }
                     }
                 }
 	            $RolesParm= $roles -Join ','
+                If([string]::IsNullOrEmpty( $RolesParam)) {
+                    $RolesParam= 'Mailbox'
+                }
                 $Params= '/mode:install', "/roles:$RolesParm", '/IAcceptExchangeServerLicenseTerms', '/DoNotStartTransport', '/InstallWindowsComponents'
                 If( $State['InstallMailbox']) {
                     If( $State['InstallMDBName']) {
@@ -1803,7 +1818,7 @@ process {
         }
 
 	If( $State["SkipRolesCheck"] -or $State['InstallEdge']) {
-                Write-MyOutput 'SkipRolesCheck: Skipping validation of Schema & Enterprise Administrators membership'
+            Write-MyOutput 'SkipRolesCheck: Skipping validation of Schema & Enterprise Administrators membership'
         }
         Else {
             If(! ( Test-SchemaAdmin)) {
@@ -2317,9 +2332,13 @@ process {
             $Key= (Get-ItemProperty -Path ($RegPath -f $version) -Name Installed -ErrorAction SilentlyContinue).Installed
             If( $Key -eq 1) {
                 $build= (Get-ItemProperty -Path ($RegPath -f $version) -Name Version -ErrorAction SilentlyContinue).Version
-                Write-MyVerbose ('Found Visual C++ Runtime, build {0}' -f $build)
-                $presence= $true
             }
+        }
+        If( $presence) {
+            Write-MyVerbose ('Found Visual C++ Runtime v{0}, build {1}' -f $version, $build)
+        }
+        Else {
+            Write-MyVerbose ('Could not find Visual C++ v{0} Runtime installed' -f $version)
         }
         return $presence
     }
@@ -2705,7 +2724,7 @@ process {
                     break
                 }
                 $WS2012R2_MAJOR {
-                    Package-Install "KB3041832" "CPU usage is high when you use RPC over HTTP protocol in Windows 8.1 or Windows Server 2012 R2" "Windows8.1-KB3041832-x64.msu|482449_intl_x64_zip.exe" "https://hotfixv4.trafficmanager.net/Windows%208.1/Windows%20Server%202012%20R2/sp1/Fix526512/9600/free/482449_intl_x64_zip.exe" ("/quiet", "/norestart")
+                    Package-Install "KB3041832" "CPU usage is high when you use RPC over HTTP protocol in Windows 8.1 or Windows Server 2012 R2" "windows8.1-kb3041832-x64_67dff11777c5aca0f86f2b20862de4a7959fa2ea.msu" "http://download.windowsupdate.com/c/msdownload/update/software/htfx/2015/04/windows8.1-kb3041832-x64_67dff11777c5aca0f86f2b20862de4a7959fa2ea.msu" ("/quiet", "/norestart")
                     break
                 }
                 $WS2016_MAJOR {
@@ -2868,21 +2887,27 @@ process {
                 Set-WallPaper -Path $State['Wallpaper'] -Style $State['WallpaperStyle']
             }
 
-            # Warmup IIS
-            $web = New-Object Net.WebClient
-            # To ignore self-signed cert warnings
-            [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
-            'OWA', 'ECP', 'EWS', 'Autodiscover', 'Microsoft-Server-ActiveSync', 'OAB', 'mapi', 'rpc' | ForEach-Object {
-                $url = 'https://localhost/{0}/healthcheck.htm' -f $_
-                Try {
-                    $output = $web.DownloadString($url)
-                    Write-MyOutput ('Healthcheck {0}: {1}' -f $url, ($output -split '<')[0])
+            if( !($State['InstallEdge'])){
+                Write-MyVerbose 'Performing Health Monitor checks..'
+                # Warmup IIS
+                $web = New-Object Net.WebClient
+                # To ignore self-signed cert warnings
+                [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+                'OWA', 'ECP', 'EWS', 'Autodiscover', 'Microsoft-Server-ActiveSync', 'OAB', 'mapi', 'rpc' | ForEach-Object {
+                    $url = 'https://localhost/{0}/healthcheck.htm' -f $_
+                    Try {
+                        $output = $web.DownloadString($url)
+                        Write-MyOutput ('Healthcheck {0}: {1}' -f $url, ($output -split '<')[0])
+                    }
+                    Catch {
+                        Write-MyWarning ('Healthcheck {0}: {1}' -f $url, 'ERR')
+                    }
                 }
-                Catch {
-                    Write-MyWarning ('Healthcheck {0}: {1}' -f $url, 'ERR')
-                }
+                [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $null
             }
-            [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $null
+            Else {
+                Write-MyVerbose 'InstallEdge Mode, skipping IIS health monitor checks'
+            }
 
             Enable-UAC
             Enable-IEESC
