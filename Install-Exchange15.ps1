@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.01.0, March 24th, 2019
+    Version 3.01.1, March 29th, 2019
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle and everyone else who provided feedback or contributed in other ways.
@@ -232,6 +232,7 @@
             Fixed NoSetup Mode/EmptyRoles problem
             Added skip Health Monitor checks for InstallEdge
             Fixed potential Exchange version misreporting
+    3.01.1  Fixed detection of Defender 
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -2205,7 +2206,7 @@ process {
 
     Function Configure-WindowsDefenderExclusions {
 
-        If( Get-Command -Cmdlet Add-MpPreference -ErrorAction SilentlyContinue) {
+        If( Get-Command -Name Add-MpPreference -ErrorAction SilentlyContinue) {
             $SystemRoot= "$Env:SystemRoot"
             $SystemDrive= "$Env:SystemDrive"
 
