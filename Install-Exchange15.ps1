@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.2.0, July 11th, 2019
+    Version 3.2.1, July 11th, 2019
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle and everyone else who provided feedback or contributed in other ways.
@@ -240,6 +240,7 @@
             Removed support for Windows Server 2008R2
             Removed support for Windows Server 2012
             Removed Switch UseWMF3
+    3.2.1   Updated Pagefile config for Exchange 2019 (25% mem.size)
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -2131,9 +2132,17 @@ process {
             Write-MyVerbose 'System configured to use Automatic Managed Pagefile, reconfiguring'
             Try {
                 $CS.AutomaticManagedPagefile = $false
-                # RAM + 10 MB, with maximum of 32GB + 10MB
                 $InstalledMem= $CS.TotalPhysicalMemory
-                $DesiredSize= (($InstalledMem + 10MB), (32GB+10MB)| Measure-Object -Minimum).Minimum / 1MB
+                If( $State["MajorSetupVersion"] -ge $EX2019_MAJOR) {
+                    # 25% of RAM 
+                    $DesiredSize= [int]($InstalledMem / 4 / 1MB)
+                    Write-MyVerbose ('Configuring PageFile to 25% of Total Memory: {0}MB' -f $DesiredSize)
+                }
+                Else {
+                    # RAM + 10 MB, with maximum of 32GB + 10MB
+                    $DesiredSize= (($InstalledMem + 10MB), (32GB+10MB)| Measure-Object -Minimum).Minimum / 1MB
+                    Write-MyVerbose ('Configuring PageFile Total Memory+10MB with maximum of 32GB+10MB: {0}MB' -f $DesiredSize)
+                }
                 $tmp= $CS.Put()
                 $CPF= Get-WmiObject -Class Win32_PageFileSetting
                 $CPF.InitialSize= $DesiredSize
