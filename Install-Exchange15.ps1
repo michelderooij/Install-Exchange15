@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.01.1, March 29th, 2019
+    Version 3.2.0, July 11th, 2019
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle and everyone else who provided feedback or contributed in other ways.
@@ -27,8 +27,6 @@
     .NOTES
     Requirements:
     - Operating Systems
-        - Windows Server 2008 R2 SP1
-        - Windows Server 2012
         - Windows Server 2012 R2
         - Windows Server 2016 (Exchange 2016 CU3+ only)
         - Windows Server 2019 (Desktop or Core, for Exchange 2019)
@@ -218,21 +216,30 @@
             Updated SourcePath parameter usage (ISO)
             Added .NET Framework 4.7.2 support
             Added Windows Defender presence check
-    3.00.0  Added Exchange 2019 support
+    3.0.0   Added Exchange 2019 support
             Rewritten VC++ detection
-    3.00.1  Integrated Exchange 2019 RTM Cipher correction
-    3.00.2  Replaced filename constructs with Join-Path
+    3.0.1   Integrated Exchange 2019 RTM Cipher correction
+    3.0.2   Replaced filename constructs with Join-Path
             Fixed typo in installing KB4054530
-    3.00.3  Fixed typos in Join-Path constructs
-    3.00.4  Fixed bug in Package-Install
-    3.01.0  Added support for Exchange 2019CU1
-            Added support for Exchange 2016CU12
-            Added support for Exchange 2013CU22
+    3.0.3   Fixed typos in Join-Path constructs
+    3.0.4   Fixed bug in Package-Install
+    3.1.0   Added support for Exchange 2019 CU1
+            Added support for Exchange 2016 CU12
+            Added support for Exchange 2013 CU22
             Fixed Hotfix KB3041832 url
             Fixed NoSetup Mode/EmptyRoles problem
             Added skip Health Monitor checks for InstallEdge
             Fixed potential Exchange version misreporting
-    3.01.1  Fixed detection of Defender 
+    3.1.1   Fixed detection of Defender
+    3.2.0   Added support for Exchange 2019 CU2
+            Added support for Exchange 2016 CU13
+            Added support for Exchange 2013 CU23
+            Added support for NET Framework 4.8
+            Added NoNET48 switch
+            Added disabling of Server Manager during installation
+            Removed support for Windows Server 2008R2
+            Removed support for Windows Server 2012
+            Removed Switch UseWMF3
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -295,9 +302,6 @@
     .PARAMETER SkipRolesCheck
     Instructs script not to check for Schema Admin and Enterprise Admin roles.
 
-    .PARAMETER UseWMF3
-    Installs WMF3 instead of WMF4 for Exchange 2013 SP1 or later.
-
     .PARAMETER NONET461
     Prevents installing .NET Framework 4.6.x and uses 4.5.2 when a supported Exchange version
     is being deployed.
@@ -308,6 +312,10 @@
 
     .PARAMETER NONET472
     Prevents installing .NET Framework 4.7.2 and uses 4.7.1 when a supported Exchange version
+    is being deployed.
+
+    .PARAMETER NONET48
+    Prevents installing .NET Framework 4.8 and uses 4.7.2 when a supported Exchange version
     is being deployed.
 
     .PARAMETER DisableSSL3
@@ -440,6 +448,12 @@ param(
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
         [Switch]$NoNet472,
+ 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
+        [Switch]$NoNet48,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
@@ -493,7 +507,7 @@ param(
 
 process {
 
-    $ScriptVersion                  = '3.01.0'
+    $ScriptVersion                  = '3.2.0'
 
     $ERR_OK                         = 0
     $ERR_PROBLEMADPREPARE	        = 1001
@@ -572,6 +586,7 @@ process {
     $EX2013SETUPEXE_CU20            = '15.00.1367.003'
     $EX2013SETUPEXE_CU21            = '15.00.1395.004'
     $EX2013SETUPEXE_CU22            = '15.00.1473.003'
+    $EX2013SETUPEXE_CU23            = '15.00.1497.002'
     $EX2016SETUPEXE_PRE             = '15.01.0225.016'
     $EX2016SETUPEXE_RTM             = '15.01.0225.042'
     $EX2016SETUPEXE_CU1             = '15.01.0396.030'
@@ -586,9 +601,11 @@ process {
     $EX2016SETUPEXE_CU10            = '15.01.1531.003'
     $EX2016SETUPEXE_CU11            = '15.01.1591.008'
     $EX2016SETUPEXE_CU12            = '15.01.1713.005'
+    $EX2016SETUPEXE_CU13            = '15.01.1779.002'
     $EX2019SETUPEXE_PRE             = '15.02.0196.000'
     $EX2019SETUPEXE_RTM             = '15.02.0221.012'
     $EX2019SETUPEXE_CU1             = '15.02.0330.005'
+    $EX2019SETUPEXE_CU2             = '15.02.0397.003'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
@@ -609,6 +626,7 @@ process {
     $NETVERSION_47                  = 460798
     $NETVERSION_471                 = 461310
     $NETVERSION_472                 = 461814
+    $NETVERSION_48                  = 528040
 
     Function Save-State( $State) {
         Write-MyVerbose "Saving state information to $StateFile"
@@ -653,6 +671,7 @@ process {
         $EX2013SETUPEXE_CU20= 'Exchange Server 2013 Cumulative Update 20';
         $EX2013SETUPEXE_CU21= 'Exchange Server 2013 Cumulative Update 21';
         $EX2013SETUPEXE_CU22= 'Exchange Server 2013 Cumulative Update 22';
+        $EX2013SETUPEXE_CU23= 'Exchange Server 2013 Cumulative Update 23';
         $EX2016SETUPEXE_PRE= 'Exchange Server 2016 Preview';
         $EX2016SETUPEXE_RTM= 'Exchange Server 2016 RTM';
         $EX2016SETUPEXE_CU1= 'Exchange Server 2016 Cumulative Update 1';
@@ -667,14 +686,16 @@ process {
         $EX2016SETUPEXE_CU10= 'Exchange Server 2016 Cumulative Update 10';
         $EX2016SETUPEXE_CU11= 'Exchange Server 2016 Cumulative Update 11';
         $EX2016SETUPEXE_CU12= 'Exchange Server 2016 Cumulative Update 12';
+        $EX2016SETUPEXE_CU13= 'Exchange Server 2016 Cumulative Update 13';
         $EX2019SETUPEXE_PRE= 'Exchange Server 2019 Public Preview';
         $EX2019SETUPEXE_RTM= 'Exchange Server 2019 RTM';
         $EX2019SETUPEXE_CU1= 'Exchange Server 2019 CU1';
+        $EX2019SETUPEXE_CU2= 'Exchange Server 2019 CU2';
       }
       $res= "Unknown version (build $FileVersion)"
-      ForEach( $Version in $Versions.GetEnumerator() ) {
-          If( is-MinimalBuild -BuildNumber $FileVersion -ReferenceBuildNumber $Version.Name ) {
-              $res= '{0} (build {1})' -f $Version.Value, $FileVersion
+      $Versions.GetEnumerator() | Sort-Object -Property {[System.Version]$_.Name} -Desc | ForEach {
+          If( is-MinimalBuild $_.Name $FileVersion) {
+              $res= '{0} (build {1})' -f $_.Value, $FileVersion
           }
       }
       return $res
@@ -1259,15 +1280,6 @@ process {
         Write-MyOutput 'Installing Windows Features'
 
         Switch($MajorOSVersion) {
-            $WS2008R2_MAJOR {
-                Import-Module ServerManager
-                If(!( Get-Module ServerManager )) {
-                    Write-MyError 'Problem loading ServerManager module'
-                    Exit $ERR_CANTLOADSERVERMANAGER
-                }
-                $Feats= ('NET-Framework', 'Desktop-Experience', 'RSAT-ADDS', 'Bits', 'RSAT-Clustering-CmdInterface')
-                break
-            }
             $WS2016_MAJOR {
                 If($State['InstallEdge']) {
                     $Feats= ('ADLDS', 'Bits')
@@ -1286,12 +1298,7 @@ process {
             }
         }
 
-        If( $MajorOSVersion -eq $WS2008R2_MAJOR) {
-            Add-WindowsFeature $Feats | out-null
-        }
-        Else {
-            Install-WindowsFeature $Feats | out-null
-        }
+        Install-WindowsFeature $Feats | out-null
 
         ForEach( $Feat in $Feats) {
             If( !( Get-WindowsFeature ($Feat))) {
@@ -1548,7 +1555,7 @@ process {
             0='Unknown';
             $NETVERSION_45='4.5'; $NETVERSION_451='4.5.1'; $NETVERSION_452='4.5.2'; $NETVERSION_452KB31467178='4.5.2 & KB3146717/3146718';
             $NETVERSION_46='4.6'; $NETVERSION_461='4.6.1'; $NETVERSION_462='4.6.2'; $NETVERSION_462WS2016='4.6.2 (WS2016)'; $NETVERSION_47='4.7';
-            $NETVERSION_471='4.7.1'; $NETVERSION_472='4.7.2'
+            $NETVERSION_471='4.7.1'; $NETVERSION_472='4.7.2'; $NETVERSION_48='4.8'
         }
         return ($NetVersions.GetEnumerator() | Where-Object {$NetVersion -ge $_.Name} | Sort-Object Name -Descending | Select-Object -First 1).Value
     }
@@ -1775,11 +1782,11 @@ process {
             Exit $ERR_CANTCREATETEMPFOLDER
         }
 
-        If( ($MajorOSVersion -eq $WS2012R2_MAJOR) -or ($MajorOSVersion -eq $WS2012_MAJOR) -or ($MajorOSVersion -eq $WS2008R2_MAJOR -and $MinorOSVersion -ge 7601) -or ($MajorOSVersion -eq $WS2016_MAJOR ) -or ($MajorOSVersion -eq $WS2019_MAJOR ) ) {
+        If( ($MajorOSVersion -eq $WS2012R2_MAJOR) -or ($MajorOSVersion -eq $WS2016_MAJOR ) -or ($MajorOSVersion -eq $WS2019_MAJOR ) ) {
             Write-MyOutput "Operating System is $($MajorOSVersion).$($MinorOSVersion)"
         }
         Else {
-            Write-MyError 'The following Operating Systems are supported: Windows Server 2008 R2 SP1+, Windows Server 2012, Windows Server 2012 R2, Windows Server 2016 (Exchange 2016 CU3 or later only) or Windows Server 2019 (Exchange 2019)'
+            Write-MyError 'The following Operating Systems are supported: Windows Server 2012 R2, Windows Server 2016 (Exchange 2016 CU3 or later only) or Windows Server 2019 (Exchange 2019)'
             Exit $ERR_UNEXPECTEDOS
         }
         Write-MyOutput ('Server core mode: {0}' -f (is-ServerCore))
@@ -2434,6 +2441,9 @@ process {
             $State['Wallpaper']= $null
         }
 
+        # Store Server Manager state
+        $State['DoNotOpenServerManagerAtLogon']= Get-ItemProperty -Path 'HKCU:\Software\Microsoft\ServerManager' -Name DoNotOpenServerManagerAtLogon -ErrorAction SilentlyContinue
+
         $State["Verbose"]= $VerbosePreference
 
     }
@@ -2507,10 +2517,13 @@ process {
         Set-DesktopWatermark -Text ('Setup {0}, phase {1}' -f $State['SetupVersionText'], $State['InstallPhase'])
       }
 
+      Write-MyVerbose 'Disabling Server Manager at logon'
+      New-ItemProperty -Path 'HKCU:\Software\Microsoft\ServerManager' -Name DoNotOpenServerManagerAtLogon -Value 1 -PropertyType REG_DWORD -Force -ErrorAction SilentlyContinue
+
       Switch ($State["InstallPhase"]) {
         1 {
 
-            If( @($WS2008R2_MAJOR, $WS2012_MAJOR, $WS2012R2_MAJOR, $WS2016_MAJOR) -contains $MajorOSVersion) {
+            If( @($WS2012R2_MAJOR, $WS2016_MAJOR) -contains $MajorOSVersion) {
                 If( ($State["MajorSetupVersion"] -ge $EX2016_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2016SETUPEXE_CU2)) -or
                     ($State["MajorSetupVersion"] -eq $EX2013_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2013SETUPEXE_CU13))) {
                     If( ($State["MajorSetupVersion"] -ge $EX2016_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2016SETUPEXE_CU5)) -or
@@ -2524,7 +2537,20 @@ process {
                                     If( $State["MajorSetupVersion"] -eq $EX2016_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2016SETUPEXE_CU11)) {
                                         $State["VCRedist2012"]= $True
                                     }
-                                    $State["Install472"]= $True
+                                    If( ($State["MajorSetupVersion"] -ge $EX2016_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2016SETUPEXE_CU13)) -or
+                                        ($State["MajorSetupVersion"] -eq $EX2013_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2013SETUPEXE_CU23))) {
+                                        If( $State["NoNet48"]) {
+                                            Write-MyOutput ".NET Framework 4.8 supported, but NoNet48 specified - will use .NET Framework 4.7.2"
+                                            $State["Install472"]= $True
+                                        }
+                                        Else {
+                                            Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) found, will use .NET Framework 4.8"
+                                            $State["Install48"]= $True
+                                        }
+                                    } 
+                                    Else {
+                                        $State["Install472"]= $True
+                                    }
                                 }
                                 Else {
                                     If( $State["NoNet471"]) {
@@ -2535,7 +2561,7 @@ process {
                                 # Set to install the Ex2016CU10+/Ex2013CU20+ required VC++ 2013 runtime
                                 $State["VCRedist2013"]= $True
                             }
-                            If( $State['Install472']) {
+                            If( $State['Install472'] -or $State["Install48"]) {
                                 # Life is good
                             }
                             Else {
@@ -2564,16 +2590,17 @@ process {
                 If( $State["Install461"] -or $State["Install462"] -or $State["Install471"]) {
                     # Install hotfixes required by .NET Framework 4.6.x / 4.7.x
                     Switch( $MajorOSVersion) {
-                        $WS2008R2_MAJOR {
-                        }
-                        $WS2012_MAJOR {
-                        }
                         $WS2012R2_MAJOR {
                             Package-Install "KB2919442" "KB2919442: Update for Windows Server 2012 R2" "Windows8.1-KB2919442-x64.msu" "https://download.microsoft.com/download/D/6/0/D60ED3E0-93A5-4505-8F6A-8D0A5DA16C8A/Windows8.1-KB2919442-x64.msu" ("/quiet", "/norestart")
                             Package-Install "KB2919355" "Windows RT 8.1, Windows 8.1, and Windows Server 2012 R2 update: April 2014" "Windows8.1-KB2919355-x64.msu" "https://download.microsoft.com/download/2/5/6/256CCCFB-5341-4A8D-A277-8A81B21A1E35/Windows8.1-KB2919355-x64.msu" ("/quiet", "/norestart")
                         }
+                        Default {
+                        }
                     }
                 }
+            }
+            Else {
+                Write-MyError ('Current Operating System version {0} not supported' -f $MajorOSVersion)
             }
             Write-MyOutput "Installing Operating System prerequisites"
             Install-WindowsFeatures $MajorOSVersion
@@ -2583,9 +2610,20 @@ process {
             Write-MyOutput "Installing BITS module"
             Import-Module BITSTransfer
 
-            If( $State["Install461"] -or $State["Install462"] -or $State['Install471'] -or $State['Install472']) {
+            If( $State["Install461"] -or $State["Install462"] -or $State['Install471'] -or $State['Install472'] -or $State["Install48"]) {
+                # Check .NET FrameWork 4.8 needs to be installed
+                If( $State["Install48"]) {
+                    Remove-NETFrameworkInstallBlock '4.8' '-' '48'
+                    If( (Get-NETVersion) -lt $NETVERSION_48) {
+                        Package-Install "-" "Microsoft .NET Framework 4.8" "ndp48-x86-x64-allos-enu.exe" "https://download.visualstudio.microsoft.com/download/pr/7afca223-55d2-470a-8edc-6a1739ae3252/abd170b4b0ec15ad0222a809b761a036/ndp48-x86-x64-allos-enu.exe" ("/q", "/norestart")
+                    }
+                    Else {
+                        Write-MyOutput ".NET Framework 4.8 or later detected"
+                    }
+                }
                 # Check .NET FrameWork 4.7.2 needs to be installed
                 If( $State["Install472"]) {
+                    Set-NETFrameworkInstallBlock '4.8' '-' '48'
                     Remove-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
                     If( (Get-NETVersion) -lt $NETVERSION_472) {
                         Package-Install "KB4054530" "Microsoft .NET Framework 4.7.2" "NDP472-KB4054530-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/6/E/4/6E48E8AB-DC00-419E-9704-06DD46E5F81D/NDP472-KB4054530-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
@@ -2594,73 +2632,67 @@ process {
                         Write-MyOutput ".NET Framework 4.7.2 or later detected"
                     }
                 }
+                # Check .NET FrameWork 4.7.1 needs to be installed
+                If( $State["Install471"]) {
+                    Remove-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
+                    Set-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
+                    Set-NETFrameworkInstallBlock '4.8' '-' '48'
+                    If( (Get-NETVersion) -lt $NETVERSION_471) {
+                        Package-Install "KB4033342" "Microsoft .NET Framework 4.7.1" "NDP471-KB4033342-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/9/E/6/9E63300C-0941-4B45-A0EC-0008F96DD480/NDP471-KB4033342-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
+                    }
+                    Else {
+                        Write-MyOutput ".NET Framework 4.7.1 or later detected"
+                    }
+                }
+
+                If( -not $MajorOSVersion -eq $WS2016_MAJOR) {
+                    Write-MyWarning 'Windows Server 2016 comes with .NET Framework 4.6.2, no updates required'
+                }
                 Else {
-                    # Check .NET FrameWork 4.7.1 needs to be installed
-                    If( $State["Install471"]) {
-                        Remove-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
+                    # Check .NET FrameWork 4.6.x or later needs to be installed
+                    If( $State["Install461"]) {
+                        Remove-NETFrameworkInstallBlock '4.6.1' 'KB3133990' '461'
+                        Set-NETFrameworkInstallBlock '4.6.2', 'KB3102436' '462'
+                        Set-NETFrameworkInstallBlock '4.7' 'KB4024204' '47'
+                        Set-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
                         Set-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
-                        If( (Get-NETVersion) -lt $NETVERSION_471) {
-                            Package-Install "KB4033342" "Microsoft .NET Framework 4.7.1" "NDP471-KB4033342-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/9/E/6/9E63300C-0941-4B45-A0EC-0008F96DD480/NDP471-KB4033342-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
+                        Set-NETFrameworkInstallBlock '4.8' '-' '48'
+                        If( (Get-NETVersion) -lt $NETVERSION_461) {
+                            Package-Install "KB3102467" "Microsoft .NET Framework 4.6.1" "NDP461-KB3102436-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/E/4/1/E4173890-A24A-4936-9FC9-AF930FE3FA40/NDP461-KB3102436-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
                         }
                         Else {
-                            Write-MyOutput ".NET Framework 4.7.1 or later detected"
+                            Write-MyOutput ".NET Framework 4.6.1 or later detected"
                         }
                     }
                     Else {
-                        If( -not $MajorOSVersion -eq $WS2016_MAJOR) {
-                            Write-MyWarning 'Windows Server 2016 comes with .NET Framework 4.6.2, no updates required'
+                        # Install462
+                        Remove-NETFrameworkInstallBlock '4.6.2', 'KB3102436' '462'
+                        Set-NETFrameworkInstallBlock '4.7' 'KB4024204' '47'
+                        Set-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
+                        Set-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
+                        Set-NETFrameworkInstallBlock '4.8' '-' '48'
+                        If( (Get-NETVersion) -lt $NETVERSION_462) {
+                            Package-Install "KB3102436" "Microsoft .NET Framework 4.6.2" "NDP462-KB3151800-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/F/9/4/F942F07D-F26F-4F30-B4E3-EBD54FABA377/NDP462-KB3151800-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
                         }
                         Else {
-                            # Check .NET FrameWork 4.6.x or later needs to be installed
-                            If( $State["Install461"]) {
-                                Remove-NETFrameworkInstallBlock '4.6.1' 'KB3133990' '461'
-                                Set-NETFrameworkInstallBlock '4.7' 'KB4024204' '47'
-                                Set-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
-                                Set-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
-                                If( (Get-NETVersion) -lt $NETVERSION_461) {
-                                    Package-Install "KB3102467" "Microsoft .NET Framework 4.6.1" "NDP461-KB3102436-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/E/4/1/E4173890-A24A-4936-9FC9-AF930FE3FA40/NDP461-KB3102436-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
-                                }
-                                Else {
-                                    Write-MyOutput ".NET Framework 4.6.1 or later detected"
-                                }
-                            }
-                            Else {
-                                # Install462
-                                Remove-NETFrameworkInstallBlock '4.6.2', 'KB3102436' '462'
-                                Set-NETFrameworkInstallBlock '4.7' 'KB4024204' '47'
-                                Set-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
-                                Set-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
-                                If( (Get-NETVersion) -lt $NETVERSION_462) {
-                                    Package-Install "KB3102436" "Microsoft .NET Framework 4.6.2" "NDP462-KB3151800-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/F/9/4/F942F07D-F26F-4F30-B4E3-EBD54FABA377/NDP462-KB3151800-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
-                                }
-                                Else {
-                                    Write-MyOutput ".NET Framework 4.6.2 or later detected"
-                                }
-                            }
-                            # For .NET 4.6.x or later, install required hotfixes: KB3146716 for WS2008/WS2008R2, KB3146714 for WS2012, and KB3146715 for WS2012R2
-                            Write-MyOutput "Checking applicable .NET Framework 4.6.x hotfixes"
-                            Switch( $MajorOSVersion) {
-                                $WS2008R2_MAJOR {
-                                    Package-Install "KB3146716" "Hotfix rollup 3146716 for the .NET Framework 4.6 and 4.6.1 in Windows" "NDP461-KB3146716-x86-x64-ENU.exe" "http://download.microsoft.com/download/E/F/1/EF1FB34B-58CB-4568-85EC-FA359387E328/NDP461-KB3146716-x86-x64-ENU.exe" ("/quiet", "/norestart")
-                                    break
-                                }
-                                $WS2012_MAJOR {
-                                    Package-Install "KB3146714" "Hotfix rollup 3146714 for the .NET Framework 4.6 and 4.6.1 in Windows" "Windows8-RT-KB3146714-x64.msu" "http://download.microsoft.com/download/E/F/1/EF1FB34B-58CB-4568-85EC-FA359387E328/Windows8-RT-KB3146714-x64.msu" ("/quiet", "/norestart")
-                                    break
-                                }
-                                $WS2012R2_MAJOR {
-                                    Package-Install "KB3146715" "Hotfix rollup 3146715 for the .NET Framework 4.6 and 4.6.1 in Windows" "Windows8.1-KB3146715-x64.msu" "http://download.microsoft.com/download/E/F/1/EF1FB34B-58CB-4568-85EC-FA359387E328/Windows8.1-KB3146715-x64.msu" ("/quiet", "/norestart")
-                                    break
-                                }
-                                $WS2016_MAJOR {
-                                    break
-                                }
-                            }
+                            Write-MyOutput ".NET Framework 4.6.2 or later detected"
+                        }
+                    }
+                    # For .NET 4.6.x or later, install required hotfixes: KB3146715 for WS2012R2
+                    Write-MyOutput "Checking applicable .NET Framework 4.6.x hotfixes"
+                    Switch( $MajorOSVersion) {
+                        $WS2012R2_MAJOR {
+                            Package-Install "KB3146715" "Hotfix rollup 3146715 for the .NET Framework 4.6 and 4.6.1 in Windows" "Windows8.1-KB3146715-x64.msu" "http://download.microsoft.com/download/E/F/1/EF1FB34B-58CB-4568-85EC-FA359387E328/Windows8.1-KB3146715-x64.msu" ("/quiet", "/norestart")
+                            break
+                        }
+                        Default {
+                            break
                         }
                     }
                 }
             }
             Else {
+                Set-NETFrameworkInstallBlock '4.8' '-' '48'
                 Set-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
                 Set-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
                 Set-NETFrameworkInstallBlock '4.7' 'KB4024204' '47'
@@ -2671,21 +2703,11 @@ process {
                     Write-MyOutput ".NET Framework 4.5.2 will be installed"
                     # Package GUID is different for WS2008R2/2012, .452 supported on CU7 or later
                     If( $State["SetupVersion"] -ge $EX2013SETUPEXE_CU7) {
-                        If( $MajorOSVersion -eq $WS2008R2_MAJOR) {
-                            Package-Install "{26784146-6E05-3FF9-9335-786C7C0FB5BE}" "Microsoft .NET Framework 4.5.2" "NDP452-KB2901907-x86-x64-AllOS-ENU.exe" "http://download.microsoft.com/download/E/2/1/E21644B5-2DF2-47C2-91BD-63C560427900/NDP452-KB2901907-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
-                        }
-                        Else {
-                            Package-Install "KB2934520" "Microsoft .NET Framework 4.5.2" "NDP452-KB2901907-x86-x64-AllOS-ENU.exe" "http://download.microsoft.com/download/E/2/1/E21644B5-2DF2-47C2-91BD-63C560427900/NDP452-KB2901907-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
-                        }
+                        Package-Install "KB2934520" "Microsoft .NET Framework 4.5.2" "NDP452-KB2901907-x86-x64-AllOS-ENU.exe" "http://download.microsoft.com/download/E/2/1/E21644B5-2DF2-47C2-91BD-63C560427900/NDP452-KB2901907-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
                     }
                     Else {
                         If( (Get-NETVersion) -lt $NETVERSION_451) {
-                            If( $MajorOSVersion -eq $WS2008R2_MAJOR) {
-                                Package-Install "{7DEBE4EB-6B40-3766-BB35-5CBBC385DA37}" "Microsoft .NET Framework 4.5.1" "NDP451-KB2858728-x86-x64-AllOS-ENU.exe" "http://download.microsoft.com/download/1/6/7/167F0D79-9317-48AE-AEDB-17120579F8E2/NDP451-KB2858728-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
-                            }
-                            Else {
-                                Package-Install "KB2881468" "Microsoft .NET Framework 4.5.1" "NDP451-KB2858728-x86-x64-AllOS-ENU.exe" "http://download.microsoft.com/download/1/6/7/167F0D79-9317-48AE-AEDB-17120579F8E2/NDP451-KB2858728-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
-                            }
+                            Package-Install "KB2881468" "Microsoft .NET Framework 4.5.1" "NDP451-KB2858728-x86-x64-AllOS-ENU.exe" "http://download.microsoft.com/download/1/6/7/167F0D79-9317-48AE-AEDB-17120579F8E2/NDP451-KB2858728-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
                         }
                         Else {
                             Write-MyOutput ".NET Framework 4.5.1 or later detected"
@@ -2703,27 +2725,6 @@ process {
 
             # OS specific hotfixes
             Switch( $MajorOSVersion) {
-                $WS2012_MAJOR { 
-                    Package-Install "KB2985459" "The W3wp.exe process has high CPU usage when you run PowerShell commands for Exchange" "Windows8-RT-KB2985459-x64.msu|477081_intl_x64_zip.exe" "https://hotfixv4.trafficmanager.net/Windows%208/Windows%20Server%202012%20RTM/nosp/Fix512067/9200/free/477081_intl_x64_zip.exe" ("/quiet", "/norestart")
-                    Package-Install "KB2884597" "Virtual Disk Service or applications that use the Virtual Disk Service crash or freeze in Windows Server 2012" "Windows8-RT-KB2884597-x64.msu|467323_intl_x64_zip.exe" "hotfixv4.microsoft.com/Windows%208%20RTM/nosp/Fix469260/9200/free/467323_intl_x64_zip.exe" ("/quiet", "/norestart")
-                    Package-Install "KB2894875" "Windows 8-based or Windows Server 2012-based computer freezes when you run the 'dir' command on an ReFS volume" "Windows8-RT-KB2894875-x64.msu|468889_intl_x64_zip.exe" "https://hotfixv4.trafficmanager.net/Windows%208%20RTM/nosp/Fix473391/9200/free/468889_intl_x64_zip.exe" ("/quiet", "/norestart")
-                    break
-                }
-                $WS2008R2_MAJOR {
-                    If( $State["UseWMF3"]) {
-                        Package-Install "KB2506143" "Windows Management Framework 3.0" "Windows6.1-KB2506143-x64.msu" "http://download.microsoft.com/download/E/7/6/E76850B8-DA6E-4FF5-8CCE-A24FC513FD16/Windows6.1-KB2506143-x64.msu" ("/quiet", "/norestart")
-                    } Else {
-                        Package-Install "KB2819745" "Windows Management Framework 4.0" "Windows6.1-KB2819745-x64-MultiPkg.msu" "http://download.microsoft.com/download/3/D/6/3D61D262-8549-4769-A660-230B67E15B25/Windows6.1-KB2819745-x64-MultiPkg.msu" ("/quiet", "/norestart")
-                    }
-                    Package-Install "KB974405" "Windows Identity Foundation" "Windows6.1-KB974405-x64.msu" "http://download.microsoft.com/download/D/7/2/D72FD747-69B6-40B7-875B-C2B40A6B2BDD/Windows6.1-KB974405-x64.msu" ("/quiet", "/norestart")
-                    Package-Install "KB2619234" "Enable Association Cookie/GUID used by RPC/HTTP to also be used at RPC layer" "Windows6.1-KB2619234-v2-x64.msu|437879_intl_x64_zip.exe" "https://hotfixv4.trafficmanager.net/Windows 7/Windows Server2008 R2 SP1/sp2/Fix381274/7600/free/437879_intl_x64_zip.exe" ("/quiet", "/norestart")
-                    Package-Install "KB2758857" "Insecure library loading could allow remote code execution (supersedes KB2533623)" "Windows6.1-KB2758857-x64.msu" "http://download.microsoft.com/download/A/9/1/A91A39EA-9BD8-422F-A018-44CD62CA7485/Windows6.1-KB2758857-x64.msu" ("/quiet", "/norestart")
-                    Package-Install "KB3004383" "High CPU usage by an application that depends on a Microsoft LDAP client in Windows Server 2008 R2 SP1" "Windows6.1-KB3004383-x64.msu|478887_intl_x64_zip.exe" "https://hotfixv4.trafficmanager.net/Windows%207/Windows%20Server2008%20R2%20SP1/sp2/Fix523720/7600/free/478887_intl_x64_zip.exe" ("/quiet", "/norestart")
-                    break
-                }
-                $WS2012_MAJOR {
-                    break
-                }
                 $WS2012R2_MAJOR {
                     Package-Install "KB3041832" "CPU usage is high when you use RPC over HTTP protocol in Windows 8.1 or Windows Server 2012 R2" "windows8.1-kb3041832-x64_67dff11777c5aca0f86f2b20862de4a7959fa2ea.msu" "http://download.windowsupdate.com/c/msdownload/update/software/htfx/2015/04/windows8.1-kb3041832-x64_67dff11777c5aca0f86f2b20862de4a7959fa2ea.msu" ("/quiet", "/norestart")
                     break
@@ -2886,6 +2887,12 @@ process {
             If( $WPAssembliesLoaded -and $State['Wallpaper']) {
                 Write-MyVerbose 'Restoring wallpaper configuration'
                 Set-WallPaper -Path $State['Wallpaper'] -Style $State['WallpaperStyle']
+            }
+
+
+            Write-MyVerbose 'Restoring Server Manager startup configuration'
+            If( $State['DoNotOpenServerManagerAtLogon']) {
+                New-ItemProperty -Path 'HKCU:\Software\Microsoft\ServerManager' -Name DoNotOpenServerManagerAtLogon -Value $State['DoNotOpenServerManagerAtLogon'] -ErrorAction SilentlyContinue
             }
 
             if( !($State['InstallEdge'])){
