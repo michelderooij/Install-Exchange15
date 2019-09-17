@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.2.1, July 11th, 2019
+    Version 3.2.2, September 17th, 2019
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle and everyone else who provided feedback or contributed in other ways.
@@ -241,6 +241,8 @@
             Removed support for Windows Server 2012
             Removed Switch UseWMF3
     3.2.1   Updated Pagefile config for Exchange 2019 (25% mem.size)
+    3.2.2   Added support for Exchange 2019 CU3
+            Added support for Exchange 2016 CU14
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -508,10 +510,10 @@ param(
 
 process {
 
-    $ScriptVersion                  = '3.2.0'
+    $ScriptVersion                  = '3.2.2'
 
     $ERR_OK                         = 0
-    $ERR_PROBLEMADPREPARE	        = 1001
+    $ERR_PROBLEMADPREPARE	    = 1001
     $ERR_UNEXPECTEDOS               = 1002
     $ERR_UNEXPTECTEDPHASE           = 1003
     $ERR_PROBLEMADDINGFEATURE	    = 1004
@@ -603,10 +605,12 @@ process {
     $EX2016SETUPEXE_CU11            = '15.01.1591.008'
     $EX2016SETUPEXE_CU12            = '15.01.1713.005'
     $EX2016SETUPEXE_CU13            = '15.01.1779.002'
+    $EX2016SETUPEXE_CU14            = '15.01.1847.003'
     $EX2019SETUPEXE_PRE             = '15.02.0196.000'
     $EX2019SETUPEXE_RTM             = '15.02.0221.012'
     $EX2019SETUPEXE_CU1             = '15.02.0330.005'
     $EX2019SETUPEXE_CU2             = '15.02.0397.003'
+    $EX2019SETUPEXE_CU2             = '15.02.0464.005'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
@@ -688,10 +692,12 @@ process {
         $EX2016SETUPEXE_CU11= 'Exchange Server 2016 Cumulative Update 11';
         $EX2016SETUPEXE_CU12= 'Exchange Server 2016 Cumulative Update 12';
         $EX2016SETUPEXE_CU13= 'Exchange Server 2016 Cumulative Update 13';
+        $EX2016SETUPEXE_CU14= 'Exchange Server 2016 Cumulative Update 14';
         $EX2019SETUPEXE_PRE= 'Exchange Server 2019 Public Preview';
         $EX2019SETUPEXE_RTM= 'Exchange Server 2019 RTM';
         $EX2019SETUPEXE_CU1= 'Exchange Server 2019 CU1';
         $EX2019SETUPEXE_CU2= 'Exchange Server 2019 CU2';
+        $EX2019SETUPEXE_CU3= 'Exchange Server 2019 CU3';
       }
       $res= "Unknown version (build $FileVersion)"
       $Versions.GetEnumerator() | Sort-Object -Property {[System.Version]$_.Name} -Desc | ForEach {
