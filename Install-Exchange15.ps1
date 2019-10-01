@@ -243,6 +243,7 @@
     3.2.1   Updated Pagefile config for Exchange 2019 (25% mem.size)
     3.2.2   Added support for Exchange 2019 CU3
             Added support for Exchange 2016 CU14
+    3.2.3   Fixed typo for Ex2019CU3 detection
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -510,7 +511,7 @@ param(
 
 process {
 
-    $ScriptVersion                  = '3.2.2'
+    $ScriptVersion                  = '3.2.3'
 
     $ERR_OK                         = 0
     $ERR_PROBLEMADPREPARE	    = 1001
@@ -610,7 +611,7 @@ process {
     $EX2019SETUPEXE_RTM             = '15.02.0221.012'
     $EX2019SETUPEXE_CU1             = '15.02.0330.005'
     $EX2019SETUPEXE_CU2             = '15.02.0397.003'
-    $EX2019SETUPEXE_CU2             = '15.02.0464.005'
+    $EX2019SETUPEXE_CU3             = '15.02.0464.005'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
