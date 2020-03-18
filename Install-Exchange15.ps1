@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.2.2, September 17th, 2019
+    Version 3.2.4, March 18th, 2020
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle and everyone else who provided feedback or contributed in other ways.
@@ -244,6 +244,8 @@
     3.2.2   Added support for Exchange 2019 CU3
             Added support for Exchange 2016 CU14
     3.2.3   Fixed typo for Ex2019CU3 detection
+    3.2.4   Added support for Exchange 2019 CU4+CU5
+            Added support for Exchange 2016 CU15+CU16
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -511,7 +513,7 @@ param(
 
 process {
 
-    $ScriptVersion                  = '3.2.3'
+    $ScriptVersion                  = '3.2.4'
 
     $ERR_OK                         = 0
     $ERR_PROBLEMADPREPARE	    = 1001
@@ -607,11 +609,15 @@ process {
     $EX2016SETUPEXE_CU12            = '15.01.1713.005'
     $EX2016SETUPEXE_CU13            = '15.01.1779.002'
     $EX2016SETUPEXE_CU14            = '15.01.1847.003'
+    $EX2016SETUPEXE_CU15            = '15.01.1913.005'
+    $EX2016SETUPEXE_CU16            = '15.01.1979.003'
     $EX2019SETUPEXE_PRE             = '15.02.0196.000'
     $EX2019SETUPEXE_RTM             = '15.02.0221.012'
     $EX2019SETUPEXE_CU1             = '15.02.0330.005'
     $EX2019SETUPEXE_CU2             = '15.02.0397.003'
     $EX2019SETUPEXE_CU3             = '15.02.0464.005'
+    $EX2019SETUPEXE_CU4             = '15.02.0529.005'
+    $EX2019SETUPEXE_CU5             = '15.02.0595.003'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
@@ -694,11 +700,15 @@ process {
         $EX2016SETUPEXE_CU12= 'Exchange Server 2016 Cumulative Update 12';
         $EX2016SETUPEXE_CU13= 'Exchange Server 2016 Cumulative Update 13';
         $EX2016SETUPEXE_CU14= 'Exchange Server 2016 Cumulative Update 14';
+        $EX2016SETUPEXE_CU14= 'Exchange Server 2016 Cumulative Update 15';
+        $EX2016SETUPEXE_CU15= 'Exchange Server 2016 Cumulative Update 16';
         $EX2019SETUPEXE_PRE= 'Exchange Server 2019 Public Preview';
         $EX2019SETUPEXE_RTM= 'Exchange Server 2019 RTM';
         $EX2019SETUPEXE_CU1= 'Exchange Server 2019 CU1';
         $EX2019SETUPEXE_CU2= 'Exchange Server 2019 CU2';
         $EX2019SETUPEXE_CU3= 'Exchange Server 2019 CU3';
+        $EX2019SETUPEXE_CU4= 'Exchange Server 2019 CU4';
+        $EX2019SETUPEXE_CU5= 'Exchange Server 2019 CU5';
       }
       $res= "Unknown version (build $FileVersion)"
       $Versions.GetEnumerator() | Sort-Object -Property {[System.Version]$_.Name} -Desc | ForEach {
@@ -2556,8 +2566,14 @@ process {
                                     If( ($State["MajorSetupVersion"] -ge $EX2016_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2016SETUPEXE_CU13)) -or
                                         ($State["MajorSetupVersion"] -eq $EX2013_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2013SETUPEXE_CU23))) {
                                         If( $State["NoNet48"]) {
-                                            Write-MyOutput ".NET Framework 4.8 supported, but NoNet48 specified - will use .NET Framework 4.7.2"
-                                            $State["Install472"]= $True
+                                            If( $State["MajorSetupVersion"] -ge $EX2016_MAJOR -and (is-MinimalBuild $State["SetupVersion"] $EX2016SETUPEXE_CU15)) {
+                                                Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) found, will use .NET Framework 4.8"
+                                                $State["Install48"]= $True
+                                            }
+                                            Else {
+                                                Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) found but NoNet48 specified, will use .NET Framework 4.7.2"
+                                                $State["Install472"]= $True
+                                            }
                                         }
                                         Else {
                                             Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) found, will use .NET Framework 4.8"
