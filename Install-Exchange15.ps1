@@ -247,6 +247,7 @@
     3.2.4   Added support for Exchange 2019 CU4+CU5
             Added support for Exchange 2016 CU15+CU16
     3.2.5   Fixed typo in enumeration of Exchange build to report
+            Fixed specified vs used MDBLogPath (would add unspecified <DBNAME>\Log)
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -1230,7 +1231,7 @@ process {
                         $Params+= "/DBFilePath:`"$($State['InstallMDBDBPath'])\$($State['InstallMDBName']).edb`""
                     }
                     If( $State['InstallMDBLogPath']) {
-                        $Params+= "/LogFolderPath:`"$($State['InstallMDBLogPath'])\$($State['InstallMDBName'])\Log`""
+                        $Params+= "/LogFolderPath:`"$($State['InstallMDBLogPath'])`""
                     }
                 }
                 If( $State['TargetPath']) {
