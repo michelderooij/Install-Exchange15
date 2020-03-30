@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.2.4, March 18th, 2020
+    Version 3.2.5, March 30th, 2020
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle and everyone else who provided feedback or contributed in other ways.
@@ -246,6 +246,7 @@
     3.2.3   Fixed typo for Ex2019CU3 detection
     3.2.4   Added support for Exchange 2019 CU4+CU5
             Added support for Exchange 2016 CU15+CU16
+    3.2.5   Fixed typo in enumeration of Exchange build to report
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -513,7 +514,7 @@ param(
 
 process {
 
-    $ScriptVersion                  = '3.2.4'
+    $ScriptVersion                  = '3.2.5'
 
     $ERR_OK                         = 0
     $ERR_PROBLEMADPREPARE	    = 1001
@@ -700,8 +701,8 @@ process {
         $EX2016SETUPEXE_CU12= 'Exchange Server 2016 Cumulative Update 12';
         $EX2016SETUPEXE_CU13= 'Exchange Server 2016 Cumulative Update 13';
         $EX2016SETUPEXE_CU14= 'Exchange Server 2016 Cumulative Update 14';
-        $EX2016SETUPEXE_CU14= 'Exchange Server 2016 Cumulative Update 15';
-        $EX2016SETUPEXE_CU15= 'Exchange Server 2016 Cumulative Update 16';
+        $EX2016SETUPEXE_CU15= 'Exchange Server 2016 Cumulative Update 15';
+        $EX2016SETUPEXE_CU16= 'Exchange Server 2016 Cumulative Update 16';
         $EX2019SETUPEXE_PRE= 'Exchange Server 2019 Public Preview';
         $EX2019SETUPEXE_RTM= 'Exchange Server 2019 RTM';
         $EX2019SETUPEXE_CU1= 'Exchange Server 2019 CU1';
