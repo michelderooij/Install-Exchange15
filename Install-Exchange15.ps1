@@ -8,10 +8,11 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.2.5, March 30th, 2020
+    Version 3.2.6, June 17th, 2020
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
-    Pavel Andreev, Rob Whaley, Simon Poirier, Brenle and everyone else who provided feedback or contributed in other ways.
+    Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback 
+    or contributed in other ways.
 
     .DESCRIPTION
     This script can install Exchange 2013/2016/2019 Preview prerequisites, optionally create the Exchange
@@ -29,7 +30,7 @@
     - Operating Systems
         - Windows Server 2012 R2
         - Windows Server 2016 (Exchange 2016 CU3+ only)
-        - Windows Server 2019 (Desktop or Core, for Exchange 2019)
+        - Windows Server 2019 (Desktop or Core, Exchange 2019)
     - Domain-joined system (Except for Edge)
     - "AutoPilot" mode requires account with elevated administrator privileges
     - When you let the script prepare AD, the account needs proper permissions.
@@ -248,6 +249,9 @@
             Added support for Exchange 2016 CU15+CU16
     3.2.5   Fixed typo in enumeration of Exchange build to report
             Fixed specified vs used MDBLogPath (would add unspecified <DBNAME>\Log)
+    3.2.6   Added support for Exchange 2019 CU6
+            Added support for Exchange 2016 CU17
+            Added VC++ Runtime 2012 for Exchange 2019
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -613,6 +617,7 @@ process {
     $EX2016SETUPEXE_CU14            = '15.01.1847.003'
     $EX2016SETUPEXE_CU15            = '15.01.1913.005'
     $EX2016SETUPEXE_CU16            = '15.01.1979.003'
+    $EX2016SETUPEXE_CU17            = '15.01.2044.004'
     $EX2019SETUPEXE_PRE             = '15.02.0196.000'
     $EX2019SETUPEXE_RTM             = '15.02.0221.012'
     $EX2019SETUPEXE_CU1             = '15.02.0330.005'
@@ -620,6 +625,7 @@ process {
     $EX2019SETUPEXE_CU3             = '15.02.0464.005'
     $EX2019SETUPEXE_CU4             = '15.02.0529.005'
     $EX2019SETUPEXE_CU5             = '15.02.0595.003'
+    $EX2019SETUPEXE_CU6             = '15.02.659.004'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
@@ -704,6 +710,7 @@ process {
         $EX2016SETUPEXE_CU14= 'Exchange Server 2016 Cumulative Update 14';
         $EX2016SETUPEXE_CU15= 'Exchange Server 2016 Cumulative Update 15';
         $EX2016SETUPEXE_CU16= 'Exchange Server 2016 Cumulative Update 16';
+        $EX2016SETUPEXE_CU17= 'Exchange Server 2016 Cumulative Update 17';
         $EX2019SETUPEXE_PRE= 'Exchange Server 2019 Public Preview';
         $EX2019SETUPEXE_RTM= 'Exchange Server 2019 RTM';
         $EX2019SETUPEXE_CU1= 'Exchange Server 2019 CU1';
@@ -711,6 +718,7 @@ process {
         $EX2019SETUPEXE_CU3= 'Exchange Server 2019 CU3';
         $EX2019SETUPEXE_CU4= 'Exchange Server 2019 CU4';
         $EX2019SETUPEXE_CU5= 'Exchange Server 2019 CU5';
+        $EX2019SETUPEXE_CU6= 'Exchange Server 2019 CU6';
       }
       $res= "Unknown version (build $FileVersion)"
       $Versions.GetEnumerator() | Sort-Object -Property {[System.Version]$_.Name} -Desc | ForEach {
@@ -2612,11 +2620,18 @@ process {
                     }
                 }
                 Else {
-                    If( $State["NoNet461"]) {
-                        Write-MyWarning "Ignoring NoNet461 switch: Exchange setup version ($($State["SetupVersion"])) doesn't support .NET Framework 4.6.1"
+                    If( $State["MajorSetupVersion"] -ge $EX2019_MAJOR) {
+                        $State["VCRedist2012"]= $True
+                        $State["VCRedist2013"]= $True
+                        $State["Install48"]= $True
                     }
                     Else {
-                        Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) doesn't support .NET Framework 4.6.1"
+                        If( $State["NoNet461"]) {
+                            Write-MyWarning "Ignoring NoNet461 switch: Exchange setup version ($($State["SetupVersion"])) doesn't support .NET Framework 4.6.1"
+                        }
+                        Else {
+                            Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) doesn't support .NET Framework 4.6.1"
+                        }
                     }
                 }
                 #Intermediate saving, for easy resuming when prereq-NET461 hotfixes fail
