@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.2.6, June 17th, 2020
+    Version 3.3, September 15th, 2020
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback 
@@ -252,6 +252,8 @@
     3.2.6   Added support for Exchange 2019 CU6
             Added support for Exchange 2016 CU17
             Added VC++ Runtime 2012 for Exchange 2019
+    3.3     Added support for Exchange 2019 CU7
+            Added support for Exchange 2016 CU18
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -618,6 +620,7 @@ process {
     $EX2016SETUPEXE_CU15            = '15.01.1913.005'
     $EX2016SETUPEXE_CU16            = '15.01.1979.003'
     $EX2016SETUPEXE_CU17            = '15.01.2044.004'
+    $EX2016SETUPEXE_CU18            = '15.01.2106.002'
     $EX2019SETUPEXE_PRE             = '15.02.0196.000'
     $EX2019SETUPEXE_RTM             = '15.02.0221.012'
     $EX2019SETUPEXE_CU1             = '15.02.0330.005'
@@ -626,6 +629,7 @@ process {
     $EX2019SETUPEXE_CU4             = '15.02.0529.005'
     $EX2019SETUPEXE_CU5             = '15.02.0595.003'
     $EX2019SETUPEXE_CU6             = '15.02.659.004'
+    $EX2019SETUPEXE_CU7             = '15.02.721.002'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
@@ -711,6 +715,7 @@ process {
         $EX2016SETUPEXE_CU15= 'Exchange Server 2016 Cumulative Update 15';
         $EX2016SETUPEXE_CU16= 'Exchange Server 2016 Cumulative Update 16';
         $EX2016SETUPEXE_CU17= 'Exchange Server 2016 Cumulative Update 17';
+        $EX2016SETUPEXE_CU18= 'Exchange Server 2016 Cumulative Update 18';
         $EX2019SETUPEXE_PRE= 'Exchange Server 2019 Public Preview';
         $EX2019SETUPEXE_RTM= 'Exchange Server 2019 RTM';
         $EX2019SETUPEXE_CU1= 'Exchange Server 2019 CU1';
@@ -719,6 +724,7 @@ process {
         $EX2019SETUPEXE_CU4= 'Exchange Server 2019 CU4';
         $EX2019SETUPEXE_CU5= 'Exchange Server 2019 CU5';
         $EX2019SETUPEXE_CU6= 'Exchange Server 2019 CU6';
+        $EX2019SETUPEXE_CU7= 'Exchange Server 2019 CU7';
       }
       $res= "Unknown version (build $FileVersion)"
       $Versions.GetEnumerator() | Sort-Object -Property {[System.Version]$_.Name} -Desc | ForEach {
