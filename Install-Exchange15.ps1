@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.3, September 15th, 2020
+    Version 3.4, December 28th, 2020
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback 
@@ -254,6 +254,9 @@
             Added VC++ Runtime 2012 for Exchange 2019
     3.3     Added support for Exchange 2019 CU7
             Added support for Exchange 2016 CU18
+    3.4     Added support for Exchange 2019 CU8
+            Added support for Exchange 2016 CU19
+            Script allows non-static IP config with service Windows Azure Guest Agent, Network Agent or Telemetry Service present
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -521,7 +524,7 @@ param(
 
 process {
 
-    $ScriptVersion                  = '3.2.5'
+    $ScriptVersion                  = '3.4'
 
     $ERR_OK                         = 0
     $ERR_PROBLEMADPREPARE	    = 1001
@@ -621,6 +624,7 @@ process {
     $EX2016SETUPEXE_CU16            = '15.01.1979.003'
     $EX2016SETUPEXE_CU17            = '15.01.2044.004'
     $EX2016SETUPEXE_CU18            = '15.01.2106.002'
+    $EX2016SETUPEXE_CU19            = '15.01.2176.002'
     $EX2019SETUPEXE_PRE             = '15.02.0196.000'
     $EX2019SETUPEXE_RTM             = '15.02.0221.012'
     $EX2019SETUPEXE_CU1             = '15.02.0330.005'
@@ -630,6 +634,7 @@ process {
     $EX2019SETUPEXE_CU5             = '15.02.0595.003'
     $EX2019SETUPEXE_CU6             = '15.02.659.004'
     $EX2019SETUPEXE_CU7             = '15.02.721.002'
+    $EX2019SETUPEXE_CU8             = '15.02.792.003'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
@@ -716,6 +721,7 @@ process {
         $EX2016SETUPEXE_CU16= 'Exchange Server 2016 Cumulative Update 16';
         $EX2016SETUPEXE_CU17= 'Exchange Server 2016 Cumulative Update 17';
         $EX2016SETUPEXE_CU18= 'Exchange Server 2016 Cumulative Update 18';
+        $EX2016SETUPEXE_CU19= 'Exchange Server 2016 Cumulative Update 19';
         $EX2019SETUPEXE_PRE= 'Exchange Server 2019 Public Preview';
         $EX2019SETUPEXE_RTM= 'Exchange Server 2019 RTM';
         $EX2019SETUPEXE_CU1= 'Exchange Server 2019 CU1';
@@ -725,6 +731,7 @@ process {
         $EX2019SETUPEXE_CU5= 'Exchange Server 2019 CU5';
         $EX2019SETUPEXE_CU6= 'Exchange Server 2019 CU6';
         $EX2019SETUPEXE_CU7= 'Exchange Server 2019 CU7';
+        $EX2019SETUPEXE_CU8= 'Exchange Server 2019 CU8';
       }
       $res= "Unknown version (build $FileVersion)"
       $Versions.GetEnumerator() | Sort-Object -Property {[System.Version]$_.Name} -Desc | ForEach {
@@ -1990,8 +1997,17 @@ process {
         }
         Write-MyOutput 'Checking NIC configuration ..'
         If(! (Get-WmiObject Win32_NetworkAdapterConfiguration -Filter {IPEnabled=True and DHCPEnabled=False})) {
-            Write-MyError "System doesn't have a static IP addresses configured"
-            Exit $ERR_NOFIXEDIPADDRESS
+            $AzureHosted= Get-Service | Where {$_.Name -ieq 'Windows Azure Guest Agent' -or $_.Name -ieq 'Windows Azure Network Agent' -or $_.Name -ieq 'Windows Azure Telemetry Service'}
+            If( $AzureHosted) {
+                Write-MyError "System doesn't have a static IP addresses configured"
+                Exit $ERR_NOFIXEDIPADDRESS
+            }
+            Else {
+                Write-MyOutput 'Ignoring absence of static IP address assignment(s) as Azure service(s) are present.'
+            }
+        }
+        Else {
+            Write-MyVerbose 'Static IP address(es) assigned.'
         }
 
         If ( $State['TargetPath']) {
