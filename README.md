@@ -2,7 +2,7 @@
 
 ## Getting Started
 
-This script can install Exchange 2013/2016 prerequisites, optionally create the Exchange
+This script can install Exchange 2013/2016/2019 prerequisites, optionally create the Exchange
 organization (prepares Active Directory) and installs Exchange Server. When the AutoPilot switch is
 specified, it will do all the required rebooting and automatic logging on using provided credentials.
 
@@ -13,7 +13,7 @@ location for Install (UNC path with proper permissions) to re-use additional dow
 ### Requirements
 
 * Windows Server 2008 R2 SP1, Windows Server 2012, Windows Server 2012 R2, Windows Server 2016 (Exchange 2016 CU3+ only), 
-  or Windows Server 2019 Preview (Desktop or Core, for Exchange 2019 Preview)
+  or Windows Server 2019 (Desktop or Core, for Exchange 2019)
 * Domain-joined system. (Except for Edge)
 * "AutoPilot" mode requires account with elevated administrator privileges.
 * When you let the script prepare AD, the account needs proper permissions.
