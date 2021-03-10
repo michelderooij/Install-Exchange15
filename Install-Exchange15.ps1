@@ -1962,7 +1962,7 @@ process {
                     Exit $ERR_UNKNOWNROLESSPECIFIED
                 }
                 If ( $State['InstallCAS']) {
-                    Write-MyWarning 'Exchange 2016 setup detected, will ignore InstallCAS switch'
+                    Write-MyWarning 'Exchange 2016/2019 setup detected, will ignore InstallCAS switch'
                 }
             }
             Else {
