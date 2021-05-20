@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.4, December 28th, 2020
+    Version 3.5, May 20th, 2021
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback 
@@ -257,6 +257,18 @@
     3.4     Added support for Exchange 2019 CU8
             Added support for Exchange 2016 CU19
             Script allows non-static IP config with service Windows Azure Guest Agent, Network Agent or Telemetry Service present
+    3.5     Added support for Exchange 2019 CU8
+            Added support for Exchange 2016 CU19
+            Added support for KB5003435 for 2019CU8+9,2016CU19+20 and 2013CU23
+            Added support for KB5000871 for 2019RTM-CU7, 2016CU8-CU18 and 2013CU21+22
+            Added support for Interim Update installation & detection
+            Updated .NET 4.8 download link
+            Updated Visual C++ 2012 download link (latest release)
+            Updated Visual C++ 2013 download link (latest release)
+            Corrected not installing KB3206632 on WS2019
+            Corrected disabling of Server Manager during setup
+            Fixed setting High Performance Plan for recent Windows builds
+            Textual corrections
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -266,10 +278,10 @@
     Specifies you want to install both Mailbox server and CAS roles (Exchange 2013 only).
 
     .PARAMETER InstallMailbox
-    Specifies you want to install the Mailbox server role  (Exchange 2013/2016).
+    Specifies you want to install the Mailbox server role  (Exchange 2013/2016/2019).
 
     .PARAMETER InstallEdge
-    Specifies you want to install the Edge server role  (Exchange 2013/2016).
+    Specifies you want to install the Edge server role  (Exchange 2013/2016/2019).
 
     .PARAMETER EdgeDNSSuffix
     Specifies the DNS suffix you want to use on your EDGE
@@ -524,7 +536,7 @@ param(
 
 process {
 
-    $ScriptVersion                  = '3.4'
+    $ScriptVersion                  = '3.5'
 
     $ERR_OK                         = 0
     $ERR_PROBLEMADPREPARE	    = 1001
@@ -625,6 +637,7 @@ process {
     $EX2016SETUPEXE_CU17            = '15.01.2044.004'
     $EX2016SETUPEXE_CU18            = '15.01.2106.002'
     $EX2016SETUPEXE_CU19            = '15.01.2176.002'
+    $EX2016SETUPEXE_CU20            = '15.01.2242.004'
     $EX2019SETUPEXE_PRE             = '15.02.0196.000'
     $EX2019SETUPEXE_RTM             = '15.02.0221.012'
     $EX2019SETUPEXE_CU1             = '15.02.0330.005'
@@ -632,9 +645,10 @@ process {
     $EX2019SETUPEXE_CU3             = '15.02.0464.005'
     $EX2019SETUPEXE_CU4             = '15.02.0529.005'
     $EX2019SETUPEXE_CU5             = '15.02.0595.003'
-    $EX2019SETUPEXE_CU6             = '15.02.659.004'
-    $EX2019SETUPEXE_CU7             = '15.02.721.002'
-    $EX2019SETUPEXE_CU8             = '15.02.792.003'
+    $EX2019SETUPEXE_CU6             = '15.02.0659.004'
+    $EX2019SETUPEXE_CU7             = '15.02.0721.002'
+    $EX2019SETUPEXE_CU8             = '15.02.0792.003'
+    $EX2019SETUPEXE_CU9             = '15.02.0858.005'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
@@ -722,6 +736,7 @@ process {
         $EX2016SETUPEXE_CU17= 'Exchange Server 2016 Cumulative Update 17';
         $EX2016SETUPEXE_CU18= 'Exchange Server 2016 Cumulative Update 18';
         $EX2016SETUPEXE_CU19= 'Exchange Server 2016 Cumulative Update 19';
+        $EX2016SETUPEXE_CU20= 'Exchange Server 2016 Cumulative Update 20';
         $EX2019SETUPEXE_PRE= 'Exchange Server 2019 Public Preview';
         $EX2019SETUPEXE_RTM= 'Exchange Server 2019 RTM';
         $EX2019SETUPEXE_CU1= 'Exchange Server 2019 CU1';
@@ -732,6 +747,7 @@ process {
         $EX2019SETUPEXE_CU6= 'Exchange Server 2019 CU6';
         $EX2019SETUPEXE_CU7= 'Exchange Server 2019 CU7';
         $EX2019SETUPEXE_CU8= 'Exchange Server 2019 CU8';
+        $EX2019SETUPEXE_CU9= 'Exchange Server 2019 CU9';
       }
       $res= "Unknown version (build $FileVersion)"
       $Versions.GetEnumerator() | Sort-Object -Property {[System.Version]$_.Name} -Desc | ForEach {
@@ -1330,8 +1346,8 @@ process {
                 }
                 
                 If( (is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL) -and (is-ServerCore) ) {
-			        $Feats+= 'Server-Media-Foundation'
-		        }
+                    $Feats+= 'Server-Media-Foundation'
+		}
                 break
             }
             default {
@@ -1364,6 +1380,22 @@ process {
                     If( !( $PresenceKey)){
                         # Alternative (Office2010FilterPack SP1)
                         $PresenceKey= (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\$ID" -Name 'DisplayName' -ErrorAction SilentlyContinue).DisplayName
+                        If( !( $PresenceKey)){
+                            # Check for installed Exchange IUs
+                            Switch( $State["MajorSetupVersion"]) {
+                                $EX2019_MAJOR {
+                                    $IUPath= 'Exchange 2019'
+                                }
+                                $EX2016_MAJOR {
+                                    $IUPath= 'Exchange 2016'
+                                }
+                                default {
+                                    # Ex2013
+                                    $IUPath= 'Exchange 2013'
+                                }
+                            }
+                            $PresenceKey= (Get-ItemProperty -Path ('HKLM:\Software\Microsoft\Updates\{0}\{1}' -f $IUPath, $ID) -Name 'PackageName' -ErrorAction SilentlyContinue).PackageName
+                        }
                     }
                 }
             }
@@ -1823,7 +1855,7 @@ process {
             Exit $ERR_CANTCREATETEMPFOLDER
         }
 
-        If( ($MajorOSVersion -eq $WS2012R2_MAJOR) -or ($MajorOSVersion -eq $WS2016_MAJOR ) -or ($MajorOSVersion -eq $WS2019_MAJOR ) ) {
+        If( ($MajorOSVersion -eq $WS2012R2_MAJOR) -or ($MajorOSVersion -eq $WS2016_MAJOR ) -or (is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL) ) {
             Write-MyOutput "Operating System is $($MajorOSVersion).$($MinorOSVersion)"
         }
         Else {
@@ -1847,7 +1879,7 @@ process {
         If( $State['AutoPilot']) {
             If( -not( $State['AdminAccount'] -and $State['AdminPassword'])) {
                 Try {
-		            $Script:Credentials= Get-Credential -UserName ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -Message 'Enter credentials to use'
+		    $Script:Credentials= Get-Credential -UserName ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -Message 'Enter credentials to use'
                     $State['AdminAccount']= $Credentials.UserName
                     $State['AdminPassword']= ($Credentials.Password | ConvertFrom-SecureString)
                 }
@@ -1925,8 +1957,9 @@ process {
             Write-MyOutput "Exchange setup located at $(Join-Path $($State['SourcePath']) "setup.exe")"
         }
 
-        $SetupVersion= File-DetectVersion "$($State['SourcePath'])\Setup\ServerRoles\Common\ExSetup.exe"
-	    $State['SetupVersionText']= Setup-TextVersion $SetupVersion
+        $State['ExSetupVersion']= File-DetectVersion "$($State['SourcePath'])\Setup\ServerRoles\Common\ExSetup.exe"
+        $SetupVersion= $State['ExSetupVersion']
+	$State['SetupVersionText']= Setup-TextVersion $SetupVersion
         Write-MyOutput ('ExSetup version: {0}' -f $State['SetupVersionText'])
         If( $SetupVersion) {
             $Num= $SetupVersion.split('.') | ForEach-Object { [string]([int]$_)}
@@ -1962,7 +1995,7 @@ process {
                     Exit $ERR_UNKNOWNROLESSPECIFIED
                 }
                 If ( $State['InstallCAS']) {
-                    Write-MyWarning 'Exchange 2016 setup detected, will ignore InstallCAS switch'
+                    Write-MyWarning 'Exchange 2016 or later setup detected, will ignore InstallCAS switch'
                 }
             }
             Else {
@@ -2145,8 +2178,7 @@ process {
 
     Function Configure-HighPerformancePowerPlan {
         Write-MyVerbose 'Configuring Power Plan'
-        $p = Get-CimInstance -Name root\cimv2\power -Class win32_PowerPlan | Where-Object {$_.InstanceID -eq 'Microsoft:PowerPlan\{8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c}'}
-        $tmp= Invoke-CimMethod -InputObject $p -MethodName Activate
+        $null= Start-Process -FilePath 'powercfg.exe' -ArgumentList ('/setactive','8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c') -NoNewWindow -PassThru -Wait
         $CurrentPlan = Get-WmiObject -Namespace root\cimv2\power -Class win32_PowerPlan | Where-Object { $_.IsActive }
         Write-MyOutput "Power Plan active: $($CurrentPlan.ElementName)"
     }
@@ -2464,6 +2496,7 @@ process {
             $State['SourceImage']= $null
             $State["SourcePath"]= $SourcePath
         }
+
         $State["SetupVersion"]= ( File-DetectVersion "$($State["SourcePath"])\setup.exe")
         $State["TargetPath"]= $TargetPath
         $State["AutoPilot"]= $AutoPilot
@@ -2500,7 +2533,7 @@ process {
         }
 
         # Store Server Manager state
-        $State['DoNotOpenServerManagerAtLogon']= Get-ItemProperty -Path 'HKCU:\Software\Microsoft\ServerManager' -Name DoNotOpenServerManagerAtLogon -ErrorAction SilentlyContinue
+        $State['DoNotOpenServerManagerAtLogon']= (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\ServerManager' -Name DoNotOpenServerManagerAtLogon -ErrorAction SilentlyContinue).DoNotOpenServerManagerAtLogon
 
         $State["Verbose"]= $VerbosePreference
 
@@ -2576,7 +2609,7 @@ process {
       }
 
       Write-MyVerbose 'Disabling Server Manager at logon'
-      New-ItemProperty -Path 'HKCU:\Software\Microsoft\ServerManager' -Name DoNotOpenServerManagerAtLogon -Value 1 -PropertyType REG_DWORD -Force -ErrorAction SilentlyContinue
+      New-ItemProperty -Path 'HKCU:\Software\Microsoft\ServerManager' -Name DoNotOpenServerManagerAtLogon -Value 1 -PropertyType DWord -Force -ErrorAction SilentlyContinue
 
       Switch ($State["InstallPhase"]) {
         1 {
@@ -2686,7 +2719,7 @@ process {
                 If( $State["Install48"]) {
                     Remove-NETFrameworkInstallBlock '4.8' '-' '48'
                     If( (Get-NETVersion) -lt $NETVERSION_48) {
-                        Package-Install "-" "Microsoft .NET Framework 4.8" "ndp48-x86-x64-allos-enu.exe" "https://download.visualstudio.microsoft.com/download/pr/7afca223-55d2-470a-8edc-6a1739ae3252/abd170b4b0ec15ad0222a809b761a036/ndp48-x86-x64-allos-enu.exe" ("/q", "/norestart")
+                        Package-Install "-" "Microsoft .NET Framework 4.8" "ndp48-x86-x64-allos-enu.exe" "https://download.visualstudio.microsoft.com/download/pr/2d6bb6b2-226a-4baa-bdec-798822606ff1/8494001c276a4b96804cde7829c04d7f/ndp48-x86-x64-allos-enu.exe" ("/q", "/norestart")
                     }
                     Else {
                         Write-MyOutput ".NET Framework 4.8 or later detected"
@@ -2801,10 +2834,9 @@ process {
                     break
                 }
                 $WS2016_MAJOR {
-                    # To prevent installation on WS2019
-                    If( is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL) {
+                    # To prevent installation on WS2019 which is also '10.0.x'
+                    If(-not( is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL)) {
                         Package-Install "KB3206632" "Cumulative Update for Windows Server 2016 for x64-based Systems" "windows10.0-kb3206632-x64_b2e20b7e1aa65288007de21e88cd21c3ffb05110.msu" "http://download.windowsupdate.com/d/msdownload/update/software/secu/2016/12/windows10.0-kb3206632-x64_b2e20b7e1aa65288007de21e88cd21c3ffb05110.msu" ("/quiet", "/norestart")
-                        break
                     }
                 }
             }
@@ -2817,7 +2849,7 @@ process {
             }
 
             If( -not (Get-VCRuntime -version '12.0') -and $State["VCRedist2013"] ) {
-                Package-Install "" "Visual C++ 2013 Redistributable" "vcredist_x64_2013.exe" "https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91DA-3737CD5CD6E3/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
+                Package-Install "" "Visual C++ 2013 Redistributable" "vcredist_x64_2013.exe" "https://download.visualstudio.microsoft.com/download/pr/10912041/cee5d6bca2ddbcd039da727bf4acb48a/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
             }
         }
 
@@ -2907,41 +2939,113 @@ process {
               Write-MyOutput "Installing additional recommended hotfixes and security updates for Exchange"
 
               $ImagePathVersion= File-DetectVersion ( (Get-WMIObject -Query 'select * from win32_service where name="MSExchangeServiceHost"').PathName.Trim('"') )
-              Write-MyVerbose "Installed Exchange MSExchangeIS version is $ImagePathVersion"
+              Write-MyVerbose ('Installed Exchange MSExchangeIS version {0}' -f $ImagePathVersion)
 
-              Switch( $ImagePathVersion) {
-                $EX2013SETUPEXE_CU2 {
-                    Package-Install "KB2880833" "Security Update For Exchange Server 2013 CU2" "Exchange2013-KB2880833-x64-en.msp" "http://download.microsoft.com/download/3/D/A/3DA5AC0D-4B94-479E-957F-C7C66DE1B30F/Exchange2013-KB2880833-x64-en.msp" ("/passive", "/norestart")
-                    break
+              Switch( $State['ExSetupVersion']) {
+                $EX2019SETUPEXE_CU9 {
+                    Package-Install 'KB5003435' 'Security update for Microsoft Exchange Server 2019, 2016, and 2013: May 11, 2021' 'Exchange2019-KB5003435-x64-en.msp' 'https://download.microsoft.com/download/3/3/2/332845f4-72ec-4b60-b2ee-c30cc44434c5/Exchange2019-KB5003435-x64-en.msp' ('/passive', '/norestart')
                 }
-                $EX2013SETUPEXE_CU3 {
-                    Package-Install "KB2880833" "Security Update For Exchange Server 2013 CU3" "Exchange2013-KB2880833-x64-en.msp" "http://download.microsoft.com/download/0/E/3/0E3FFD83-FE6A-48B7-85F2-3EF92155EFBE/Exchange2013-KB2880833-x64-en.msp" ("/passive", "/norestart")
-                    break
+                $EX2019SETUPEXE_CU8 {
+                    Package-Install 'KB5003435' 'Security update for Microsoft Exchange Server 2019, 2016, and 2013: May 11, 2021' 'Exchange2019-KB5003435-x64-en.msp' 'https://download.microsoft.com/download/f/5/8/f5868796-a30d-4891-bd6a-36638d4fc700/Exchange2019-KB5003435-x64-en.msp' ('/passive', '/norestart')
                 }
-                $EX2013SETUPEXE_SP1 {
-                    Exchange2013-KB2938053-FixIt
-                    break
+                $EX2019SETUPEXE_CU7 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2019-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/e/e/b/eebfc26d-a170-4ffd-ad7c-7d73639603d6/Exchange2019-KB5000871-x64-en.msp' ('/passive', '/norestart')
                 }
-                $EX2013SETUPEXE_CU5 {
-                    DisableSharedCacheServiceProbe
-                    break
+                $EX2019SETUPEXE_CU6 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2019-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/b/b/d/bbda2043-1d3f-49b0-83c8-646619a45997/Exchange2019-KB5000871-x64-en.msp' ('/passive', '/norestart')
                 }
-                $EX2013SETUPEXE_CU6 {
-                    Exchange2013-KB2997355-FixIt
-                    break
+                $EX2019SETUPEXE_CU5 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2019-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/1/6/3/163330f6-9707-49f3-a75b-06ef88ebd739/Exchange2019-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2019SETUPEXE_CU4 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2019-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/2/9/a/29a75e9c-c4bb-4457-8681-77f33dc368e7/Exchange2019-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2019SETUPEXE_CU3 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2019-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/0/d/0/0d00b746-8927-4ad1-9f57-a727a0b23372/Exchange2019-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2019SETUPEXE_CU2 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2019-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/7/d/e/7deaff7a-9967-4dc4-8d35-8ba191bac632/Exchange2019-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2019SETUPEXE_CU1 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2019-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/5/d/f/5dfffbaa-6a19-48e6-ac96-2339a6ffb81c/Exchange2019-KB5000871-x64-en.msp' ('/passive', '/norestart')
                 }
                 $EX2019SETUPEXE_RTM {
                     Exchange2019-FixCipherSuite
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2019-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/d/a/b/dabcffe4-9f2b-4a40-8f51-e677e95439e4/Exchange2019-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU20 {
+                    Package-Install 'KB5003435' 'Security update for Microsoft Exchange Server 2019, 2016, and 2013: May 11, 2021' 'Exchange2016-KB5003435-x64-en.msp' 'https://download.microsoft.com/download/b/8/c/b8c73a56-8347-4b0b-97dd-4a84dbf138a3/Exchange2016-KB5003435-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU19 {
+                    Package-Install 'KB5003435' 'Security update for Microsoft Exchange Server 2019, 2016, and 2013: May 11, 2021' 'Exchange2016-KB5003435-x64-en.msp' 'https://download.microsoft.com/download/3/2/3/323a68cd-8841-407e-8dc5-899b3b204ce5/Exchange2016-KB5003435-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU18 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/0/e/4/0e4056bd-0d6d-4738-a43b-bf9e23b14298/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU17 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/a/1/b/a1b06d42-0da5-488e-a35f-e5cf64affb7d/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU16 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/2/b/1/2b118676-2689-4165-9771-5331d7407ffc/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU15 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/2/e/b/2eb77c36-891a-4ce7-a58a-9ba1ff9105ca/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU14 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/6/7/a/67aca2d7-3b6f-4a4e-9c84-049a82673a64/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU13 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/8/f/d/8fdda3d9-8335-4bb5-8ba5-7ad4358bfce1/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU12 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/6/0/8/60874fd7-888f-4d11-ba85-5fd569420c93/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU11 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/a/e/c/aec299e9-79dc-4191-8e54-0ba6c0b6de31/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU10 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/b/b/8/bb8f4377-bbd6-4784-a4b7-274f8859749f/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU9 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/b/f/e/bfea9f97-55b4-42df-9b79-3200e0f21488/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU8 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/7/6/2/7629dc30-f56c-4881-bf94-eee754c52d9e/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2013SETUPEXE_CU23 {
+                    Package-Install 'KB5003435' 'Security update for Microsoft Exchange Server 2019, 2016, and 2013: May 11, 2021' 'Exchange2013-KB5003435-x64-en.msp' 'https://download.microsoft.com/download/6/d/b/6db9b354-306c-4ad6-8cc2-c07ca896a4b7/Exchange2013-KB5003435-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2013SETUPEXE_CU22 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2013-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/7/7/1/77143a1f-3745-4f68-a236-b484c65ebc9f/Exchange2013-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2013SETUPEXE_CU21 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2013-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/0/d/4/0d401b35-bcd6-4608-a286-542d70e0eeef/Exchange2013-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2013SETUPEXE_CU6 {
+                    Exchange2013-KB2997355-FixIt
+                }
+                $EX2013SETUPEXE_CU5 {
+                    DisableSharedCacheServiceProbe
+                }
+                $EX2013SETUPEXE_SP1 {
+                    Exchange2013-KB2938053-FixIt
+                }
+                $EX2013SETUPEXE_CU3 {
+                    Package-Install "KB2880833" "Security Update For Exchange Server 2013 CU3" "Exchange2013-KB2880833-x64-en.msp" "http://download.microsoft.com/download/0/E/3/0E3FFD83-FE6A-48B7-85F2-3EF92155EFBE/Exchange2013-KB2880833-x64-en.msp" ("/passive", "/norestart")
+                }
+                $EX2013SETUPEXE_CU2 {
+                    Package-Install "KB2880833" "Security Update For Exchange Server 2013 CU2" "Exchange2013-KB2880833-x64-en.msp" "http://download.microsoft.com/download/3/D/A/3DA5AC0D-4B94-479E-957F-C7C66DE1B30F/Exchange2013-KB2880833-x64-en.msp" ("/passive", "/norestart")
                 }
                 default {
 
                 }
-
               }
+
               If( ($State["MajorSetupVersion"] -eq $EX2016_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2016SETUPEXE_CU10)) -or
                   ($State["MajorSetupVersion"] -eq $EX2013_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2013SETUPEXE_CU20))) {
                   Package-Install "{1D8E6291-B0D5-35EC-8441-6616F567A0F7}" "Microsoft Visual C++ 2010 Service Pack 1 Redistributable Package MFC Security Update" "vcredist_x64_2010.exe" "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
               }
+
             }
         }
 
@@ -2963,7 +3067,7 @@ process {
 
             Write-MyVerbose 'Restoring Server Manager startup configuration'
             If( $State['DoNotOpenServerManagerAtLogon']) {
-                New-ItemProperty -Path 'HKCU:\Software\Microsoft\ServerManager' -Name DoNotOpenServerManagerAtLogon -Value $State['DoNotOpenServerManagerAtLogon'] -ErrorAction SilentlyContinue
+                New-ItemProperty -Path 'HKCU:\Software\Microsoft\ServerManager' -Name DoNotOpenServerManagerAtLogon -Value $State['DoNotOpenServerManagerAtLogon'] -Force -ErrorAction SilentlyContinue
             }
 
             if( !($State['InstallEdge'])){
