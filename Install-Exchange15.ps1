@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.5, May 20th, 2021
+    Version 3.6, September 28th, 2021
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback 
@@ -269,6 +269,15 @@
             Corrected disabling of Server Manager during setup
             Fixed setting High Performance Plan for recent Windows builds
             Textual corrections
+    3.6     Added support for Exchange 2019 CU11
+            Added support for Exchange 2016 CU22
+            Added support for Exchange 2019 CU10
+            Added support for Exchange 2019 CU9
+            Added support for Exchange 2016 CU21
+            Added support for Exchange 2016 CU20
+            Added IIS URL Rewrite prereq for Ex2019CU11 & Ex2016 CU22
+            Added support for KB2999226 on for WS2012R2
+            Added DiagnosticData switch to set initial DataCollectionEnabled mode
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -364,6 +373,9 @@
     .PARAMETER Lock
     Locks system when running script.
 
+    .PARAMETER DiagnosticData
+    Switch determines initial Data Collection mode for deploying Exchange 2019 CU11, Exchange 2016 CU22 or later builds.
+
     .PARAMETER Phase
     Internal Use Only :)
 
@@ -392,29 +404,29 @@ param(
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
-		[ValidatePattern("(?# Organization Name can only consist of upper or lowercase A-Z, 0-9, spaces - not at beginning or end, hyphen or dash characters, can be up to 64 characters in length, and can't be empty)^[a-zA-Z0-9\-\�\�][a-zA-Z0-9\-\�\�\ ]{1,62}[a-zA-Z0-9\-\�\�]$")]
-		[string]$Organization,
-    [parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
+	[ValidatePattern("(?# Organization Name can only consist of upper or lowercase A-Z, 0-9, spaces - not at beginning or end, hyphen or dash characters, can be up to 64 characters in length, and can't be empty)^[a-zA-Z0-9\-\�\�][a-zA-Z0-9\-\�\�\ ]{1,62}[a-zA-Z0-9\-\�\�]$")]
+	[string]$Organization,
+        [parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
         [switch]$InstallMultiRole,
 	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
         [switch]$InstallCAS,
    	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
-            [switch]$InstallMailbox,
-    [parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
+        [switch]$InstallMailbox,
+        [parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
         [switch]$InstallEdge,
-    [parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
+        [parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
     	[String]$EdgeDNSSuffix,
 	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
         [switch]$Recover,
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
-		[string]$MDBName,
+	[string]$MDBName,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
-		[string]$MDBDBPath,
+	[string]$MDBDBPath,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
-		[string]$MDBLogPath,
+	[string]$MDBLogPath,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
@@ -422,7 +434,7 @@ param(
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='AutoPilot')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
-		[string]$InstallPath= 'C:\Install',
+	[string]$InstallPath= 'C:\Install',
 	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
 	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
  	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
@@ -430,22 +442,22 @@ param(
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
         [ValidateScript({ (Test-Path -Path $_ -PathType Container) -or (Get-DiskImage -ImagePath $_) })]
-		[string]$SourcePath,
+	[string]$SourcePath,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
-		[string]$TargetPath,
+	[string]$TargetPath,
 	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
-		[switch]$NoSetup= $false,
+	[switch]$NoSetup= $false,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
-		[switch]$AutoPilot,
+	[switch]$AutoPilot,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
@@ -515,6 +527,13 @@ param(
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
+        [Switch]$DiagnosticData,
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
+ 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
+ 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
         [Switch]$Lock,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
@@ -536,7 +555,7 @@ param(
 
 process {
 
-    $ScriptVersion                  = '3.5'
+    $ScriptVersion                  = '3.6'
 
     $ERR_OK                         = 0
     $ERR_PROBLEMADPREPARE	    = 1001
@@ -638,6 +657,8 @@ process {
     $EX2016SETUPEXE_CU18            = '15.01.2106.002'
     $EX2016SETUPEXE_CU19            = '15.01.2176.002'
     $EX2016SETUPEXE_CU20            = '15.01.2242.004'
+    $EX2016SETUPEXE_CU21            = '15.01.2308.008'
+    $EX2016SETUPEXE_CU22            = '15.01.2375.007'
     $EX2019SETUPEXE_PRE             = '15.02.0196.000'
     $EX2019SETUPEXE_RTM             = '15.02.0221.012'
     $EX2019SETUPEXE_CU1             = '15.02.0330.005'
@@ -649,6 +670,8 @@ process {
     $EX2019SETUPEXE_CU7             = '15.02.0721.002'
     $EX2019SETUPEXE_CU8             = '15.02.0792.003'
     $EX2019SETUPEXE_CU9             = '15.02.0858.005'
+    $EX2019SETUPEXE_CU10            = '15.02.0922.007'
+    $EX2019SETUPEXE_CU11            = '15.02.0986.005'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
@@ -737,6 +760,8 @@ process {
         $EX2016SETUPEXE_CU18= 'Exchange Server 2016 Cumulative Update 18';
         $EX2016SETUPEXE_CU19= 'Exchange Server 2016 Cumulative Update 19';
         $EX2016SETUPEXE_CU20= 'Exchange Server 2016 Cumulative Update 20';
+        $EX2016SETUPEXE_CU21= 'Exchange Server 2016 Cumulative Update 21';
+        $EX2016SETUPEXE_CU22= 'Exchange Server 2016 Cumulative Update 22';
         $EX2019SETUPEXE_PRE= 'Exchange Server 2019 Public Preview';
         $EX2019SETUPEXE_RTM= 'Exchange Server 2019 RTM';
         $EX2019SETUPEXE_CU1= 'Exchange Server 2019 CU1';
@@ -748,6 +773,8 @@ process {
         $EX2019SETUPEXE_CU7= 'Exchange Server 2019 CU7';
         $EX2019SETUPEXE_CU8= 'Exchange Server 2019 CU8';
         $EX2019SETUPEXE_CU9= 'Exchange Server 2019 CU9';
+        $EX2019SETUPEXE_CU10= 'Exchange Server 2019 CU10';
+        $EX2019SETUPEXE_CU11= 'Exchange Server 2019 CU11';
       }
       $res= "Unknown version (build $FileVersion)"
       $Versions.GetEnumerator() | Sort-Object -Property {[System.Version]$_.Name} -Desc | ForEach {
@@ -1013,7 +1040,7 @@ process {
     Function Disable-OpenFileSecurityWarning {
         Write-MyVerbose 'Disabling File Security Warning dialog'
         New-Item -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Associations' -ErrorAction SilentlyContinue |out-null
-        New-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Associations' -name 'LowRiskFileTypes' -value '.exe;.msp;.msu' -ErrorAction SilentlyContinue |out-null
+        New-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Associations' -name 'LowRiskFileTypes' -value '.exe;.msp;.msu;.msi' -ErrorAction SilentlyContinue |out-null
         New-Item -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Attachments' -ErrorAction SilentlyContinue |out-null
         New-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Attachments' -name 'SaveZoneInformation' -value 1 -ErrorAction SilentlyContinue |out-null
         Remove-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Associations' -Name 'LowRiskFileTypes' -ErrorAction SilentlyContinue
@@ -1053,6 +1080,11 @@ process {
                     $ArgumentList+= @( $FullName)
                     $ArgumentList+= @( '/f')
                     $Cmd= "$env:SystemRoot\System32\WUSA.EXE"
+                }
+                '.MSI' {
+                    $ArgumentList+= @( '/i')
+                    $ArgumentList+= @( $FullName)
+                    $Cmd= "MSIEXEC.EXE"
                 }
                 '.MSP' {
                     $ArgumentList+= @( '/update')
@@ -1226,9 +1258,10 @@ process {
         Else {
             $PresenceKey= 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{4934D1EA-BE46-48B1-8847-F1AF20E892C1}'
         }
+        
         If( $State['Recover']) {
             Write-MyOutput 'Wil run Setup in recover mode'
-            $Params= '/mode:RecoverServer', '/IAcceptExchangeServerLicenseTerms', '/DoNotStartTransport', '/InstallWindowsComponents'
+            $Params= '/mode:RecoverServer', $State['IAcceptSwitch'], '/DoNotStartTransport', '/InstallWindowsComponents'
             If( $State['TargetPath']) {
                 $Params+= "/TargetDir:`"$($State['TargetPath'])`""
             }
@@ -1236,7 +1269,7 @@ process {
         Else {
             If( $State['Upgrade']) {
                 Write-MyOutput 'Wil run Setup in upgrade mode'
-                $Params= '/mode:Upgrade', '/IAcceptExchangeServerLicenseTerms'
+                $Params= '/mode:Upgrade', $State['IAcceptSwitch']
             }
             Else {
                 $roles= @()
@@ -1259,7 +1292,7 @@ process {
                 If([string]::IsNullOrEmpty( $RolesParam)) {
                     $RolesParam= 'Mailbox'
                 }
-                $Params= '/mode:install', "/roles:$RolesParm", '/IAcceptExchangeServerLicenseTerms', '/DoNotStartTransport', '/InstallWindowsComponents'
+                $Params= '/mode:install', "/roles:$RolesParm", $State['IAcceptSwitch'], '/DoNotStartTransport', '/InstallWindowsComponents'
                 If( $State['InstallMailbox']) {
                     If( $State['InstallMDBName']) {
                         $Params+= "/MdbName:$($State['InstallMDBName'])"
@@ -2005,6 +2038,21 @@ process {
                 }
             }
         }
+
+        If( ($State["MajorSetupVersion"] -eq $EX2019_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2019SETUPEXE_CU11)) -or
+            ($State["MajorSetupVersion"] -eq $EX2016_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2016SETUPEXE_CU22))) {
+            If( $State['DiagnosticData']) {
+                $State['IAcceptSwitch']= '/IAcceptExchangeServerLicenseTerms_DiagnosticDataON'
+                Write-MyOutput 'Wil deploy Exchange with Data Collection enabled'
+            }
+            Else {
+                 $State['IAcceptSwitch']= '/IAcceptExchangeServerLicenseTerms_DiagnosticDataOFF'
+            }
+        }
+        Else {
+             $State['IAcceptSwitch']= '/IAcceptExchangeServerLicenseTerms'
+        }
+
         if( !($State['InstallEdge'])){
             If( ( Test-ExistingExchangeServer $env:computerName) -and ($State["InstallPhase"] -eq 1)) {
                 If( $State['Recover']) {
@@ -2042,7 +2090,6 @@ process {
         Else {
             Write-MyVerbose 'Static IP address(es) assigned.'
         }
-
         If ( $State['TargetPath']) {
             $Location= Split-Path $State['TargetPath'] -Qualifier
             Write-MyOutput 'Checking installation path ..'
@@ -2518,6 +2565,7 @@ process {
         $State["DisableRC4"]= $DisableRC4
         $State["SkipRolesCheck"]= $SkipRolesCheck
         $State["SCP"]= $SCP
+        $State["DiagnosticData"]= $DiagnosticData
         $State["Lock"]= $Lock
         $State["EdgeDNSSuffix"]= $EdgeDNSSuffix
         $State["InstallPath"]= $InstallPath
@@ -2831,6 +2879,7 @@ process {
             Switch( $MajorOSVersion) {
                 $WS2012R2_MAJOR {
                     Package-Install "KB3041832" "CPU usage is high when you use RPC over HTTP protocol in Windows 8.1 or Windows Server 2012 R2" "windows8.1-kb3041832-x64_67dff11777c5aca0f86f2b20862de4a7959fa2ea.msu" "http://download.windowsupdate.com/c/msdownload/update/software/htfx/2015/04/windows8.1-kb3041832-x64_67dff11777c5aca0f86f2b20862de4a7959fa2ea.msu" ("/quiet", "/norestart")
+                    Package-Install "KB2999226" "Update for Universal C Runtime in Windows" "Windows8.1-KB2999226-x64.msu" "https://download.microsoft.com/download/D/1/3/D13E3150-3BB2-4B22-9D8A-47EE2D609FFF/Windows8.1-KB2999226-x64.msu" ("/quiet", "/norestart")
                     break
                 }
                 $WS2016_MAJOR {
@@ -2851,6 +2900,17 @@ process {
             If( -not (Get-VCRuntime -version '12.0') -and $State["VCRedist2013"] ) {
                 Package-Install "" "Visual C++ 2013 Redistributable" "vcredist_x64_2013.exe" "https://download.visualstudio.microsoft.com/download/pr/10912041/cee5d6bca2ddbcd039da727bf4acb48a/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
             }
+
+            If( ($State["MajorSetupVersion"] -eq $EX2019_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2019SETUPEXE_CU10)) -or
+                ($State["MajorSetupVersion"] -eq $EX2016_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2016SETUPEXE_CU21))) {
+                Package-Install "{1D8E6291-B0D5-35EC-8441-6616F567A0F7}" "Microsoft Visual C++ 2010 Service Pack 1 Redistributable Package MFC Security Update" "vcredist_x64_2010.exe" "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
+            }
+
+            If( ($State["MajorSetupVersion"] -eq $EX2019_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2019SETUPEXE_CU11)) -or
+                ($State["MajorSetupVersion"] -eq $EX2016_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2016SETUPEXE_CU22))) {
+                Package-Install "{9BCA2118-F753-4A1E-BCF3-5A820729965C}" "URL Rewrite Module 2.1" "rewrite_amd64_en-US.msi" "https://download.microsoft.com/download/1/2/8/128E2E22-C1B9-44A4-BE2A-5859ED1D4592/rewrite_amd64_en-US.msi" ("/quiet", "/norestart")
+            }
+
         }
 
         3 {
@@ -2870,7 +2930,7 @@ process {
                 Write-MyOutput "Checking/Preparing Active Directory"
                 Prepare-Exchange
             }
-            
+
         }
 
         4 {
