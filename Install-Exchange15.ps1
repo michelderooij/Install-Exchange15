@@ -1352,7 +1352,7 @@ process {
             If(!$State['InstallEdge']) {
                 Write-MyOutput "Preparing AD, Exchange organization will be $($State['OrganizationName'])"¨
             }
-            $params+= '/IAcceptExchangeServerLicenseTerms'
+            $params+= $State['IAcceptSwitch']
             StartWait-Process $State['SourcePath'] 'setup.exe' $params
             If( ( ( Test-ExchangeOrganization $State['OrganizationName']) -eq $null) -or
                 ( (Get-ExchangeForestLevel) -lt $MinFFL) -or
@@ -2043,7 +2043,7 @@ process {
             ($State["MajorSetupVersion"] -eq $EX2016_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2016SETUPEXE_CU22))) {
             If( $State['DiagnosticData']) {
                 $State['IAcceptSwitch']= '/IAcceptExchangeServerLicenseTerms_DiagnosticDataON'
-                Write-MyOutput 'Wil deploy Exchange with Data Collection enabled'
+                Write-MyOutput 'Will deploy Exchange with Data Collection enabled'
             }
             Else {
                  $State['IAcceptSwitch']= '/IAcceptExchangeServerLicenseTerms_DiagnosticDataOFF'
