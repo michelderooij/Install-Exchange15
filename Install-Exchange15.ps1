@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.4, December 28th, 2020
+    Version 3.61, March 23rd, 2022
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback 
@@ -257,6 +257,28 @@
     3.4     Added support for Exchange 2019 CU8
             Added support for Exchange 2016 CU19
             Script allows non-static IP config with service Windows Azure Guest Agent, Network Agent or Telemetry Service present
+    3.5     Added support for Exchange 2019 CU8
+            Added support for Exchange 2016 CU19
+            Added support for KB5003435 for 2019CU8+9,2016CU19+20 and 2013CU23
+            Added support for KB5000871 for 2019RTM-CU7, 2016CU8-CU18 and 2013CU21+22
+            Added support for Interim Update installation & detection
+            Updated .NET 4.8 download link
+            Updated Visual C++ 2012 download link (latest release)
+            Updated Visual C++ 2013 download link (latest release)
+            Corrected not installing KB3206632 on WS2019
+            Corrected disabling of Server Manager during setup
+            Fixed setting High Performance Plan for recent Windows builds
+            Textual corrections
+    3.6     Added support for Exchange 2019 CU11
+            Added support for Exchange 2016 CU22
+            Added support for Exchange 2019 CU10
+            Added support for Exchange 2019 CU9
+            Added support for Exchange 2016 CU21
+            Added support for Exchange 2016 CU20
+            Added IIS URL Rewrite prereq for Ex2019CU11 & Ex2016 CU22
+            Added support for KB2999226 on for WS2012R2
+            Added DiagnosticData switch to set initial DataCollectionEnabled mode
+    3.61    Added mention of Exchange 2019
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -266,10 +288,10 @@
     Specifies you want to install both Mailbox server and CAS roles (Exchange 2013 only).
 
     .PARAMETER InstallMailbox
-    Specifies you want to install the Mailbox server role  (Exchange 2013/2016).
+    Specifies you want to install the Mailbox server role  (Exchange 2013/2016/2019).
 
     .PARAMETER InstallEdge
-    Specifies you want to install the Edge server role  (Exchange 2013/2016).
+    Specifies you want to install the Edge server role  (Exchange 2013/2016/2019).
 
     .PARAMETER EdgeDNSSuffix
     Specifies the DNS suffix you want to use on your EDGE
@@ -352,6 +374,9 @@
     .PARAMETER Lock
     Locks system when running script.
 
+    .PARAMETER DiagnosticData
+    Switch determines initial Data Collection mode for deploying Exchange 2019 CU11, Exchange 2016 CU22 or later builds.
+
     .PARAMETER Phase
     Internal Use Only :)
 
@@ -380,29 +405,29 @@ param(
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
-		[ValidatePattern("(?# Organization Name can only consist of upper or lowercase A-Z, 0-9, spaces - not at beginning or end, hyphen or dash characters, can be up to 64 characters in length, and can't be empty)^[a-zA-Z0-9\-\�\�][a-zA-Z0-9\-\�\�\ ]{1,62}[a-zA-Z0-9\-\�\�]$")]
-		[string]$Organization,
-    [parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
+	[ValidatePattern("(?# Organization Name can only consist of upper or lowercase A-Z, 0-9, spaces - not at beginning or end, hyphen or dash characters, can be up to 64 characters in length, and can't be empty)^[a-zA-Z0-9\-\�\�][a-zA-Z0-9\-\�\�\ ]{1,62}[a-zA-Z0-9\-\�\�]$")]
+	[string]$Organization,
+        [parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
         [switch]$InstallMultiRole,
 	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
         [switch]$InstallCAS,
    	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
-            [switch]$InstallMailbox,
-    [parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
+        [switch]$InstallMailbox,
+        [parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
         [switch]$InstallEdge,
-    [parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
+        [parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
     	[String]$EdgeDNSSuffix,
 	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
         [switch]$Recover,
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
-		[string]$MDBName,
+	[string]$MDBName,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
-		[string]$MDBDBPath,
+	[string]$MDBDBPath,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
-		[string]$MDBLogPath,
+	[string]$MDBLogPath,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
@@ -410,7 +435,7 @@ param(
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='AutoPilot')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
-		[string]$InstallPath= 'C:\Install',
+	[string]$InstallPath= 'C:\Install',
 	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
 	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
  	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
@@ -418,22 +443,22 @@ param(
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
         [ValidateScript({ (Test-Path -Path $_ -PathType Container) -or (Get-DiskImage -ImagePath $_) })]
-		[string]$SourcePath,
+	[string]$SourcePath,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
-		[string]$TargetPath,
+	[string]$TargetPath,
 	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
-		[switch]$NoSetup= $false,
+	[switch]$NoSetup= $false,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
-		[switch]$AutoPilot,
+	[switch]$AutoPilot,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
@@ -503,6 +528,13 @@ param(
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
+        [Switch]$DiagnosticData,
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
+ 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
+ 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
         [Switch]$Lock,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
@@ -524,7 +556,7 @@ param(
 
 process {
 
-    $ScriptVersion                  = '3.4'
+    $ScriptVersion                  = '3.61'
 
     $ERR_OK                         = 0
     $ERR_PROBLEMADPREPARE	    = 1001
@@ -625,6 +657,9 @@ process {
     $EX2016SETUPEXE_CU17            = '15.01.2044.004'
     $EX2016SETUPEXE_CU18            = '15.01.2106.002'
     $EX2016SETUPEXE_CU19            = '15.01.2176.002'
+    $EX2016SETUPEXE_CU20            = '15.01.2242.004'
+    $EX2016SETUPEXE_CU21            = '15.01.2308.008'
+    $EX2016SETUPEXE_CU22            = '15.01.2375.007'
     $EX2019SETUPEXE_PRE             = '15.02.0196.000'
     $EX2019SETUPEXE_RTM             = '15.02.0221.012'
     $EX2019SETUPEXE_CU1             = '15.02.0330.005'
@@ -632,9 +667,12 @@ process {
     $EX2019SETUPEXE_CU3             = '15.02.0464.005'
     $EX2019SETUPEXE_CU4             = '15.02.0529.005'
     $EX2019SETUPEXE_CU5             = '15.02.0595.003'
-    $EX2019SETUPEXE_CU6             = '15.02.659.004'
-    $EX2019SETUPEXE_CU7             = '15.02.721.002'
-    $EX2019SETUPEXE_CU8             = '15.02.792.003'
+    $EX2019SETUPEXE_CU6             = '15.02.0659.004'
+    $EX2019SETUPEXE_CU7             = '15.02.0721.002'
+    $EX2019SETUPEXE_CU8             = '15.02.0792.003'
+    $EX2019SETUPEXE_CU9             = '15.02.0858.005'
+    $EX2019SETUPEXE_CU10            = '15.02.0922.007'
+    $EX2019SETUPEXE_CU11            = '15.02.0986.005'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
@@ -722,6 +760,9 @@ process {
         $EX2016SETUPEXE_CU17= 'Exchange Server 2016 Cumulative Update 17';
         $EX2016SETUPEXE_CU18= 'Exchange Server 2016 Cumulative Update 18';
         $EX2016SETUPEXE_CU19= 'Exchange Server 2016 Cumulative Update 19';
+        $EX2016SETUPEXE_CU20= 'Exchange Server 2016 Cumulative Update 20';
+        $EX2016SETUPEXE_CU21= 'Exchange Server 2016 Cumulative Update 21';
+        $EX2016SETUPEXE_CU22= 'Exchange Server 2016 Cumulative Update 22';
         $EX2019SETUPEXE_PRE= 'Exchange Server 2019 Public Preview';
         $EX2019SETUPEXE_RTM= 'Exchange Server 2019 RTM';
         $EX2019SETUPEXE_CU1= 'Exchange Server 2019 CU1';
@@ -732,6 +773,9 @@ process {
         $EX2019SETUPEXE_CU6= 'Exchange Server 2019 CU6';
         $EX2019SETUPEXE_CU7= 'Exchange Server 2019 CU7';
         $EX2019SETUPEXE_CU8= 'Exchange Server 2019 CU8';
+        $EX2019SETUPEXE_CU9= 'Exchange Server 2019 CU9';
+        $EX2019SETUPEXE_CU10= 'Exchange Server 2019 CU10';
+        $EX2019SETUPEXE_CU11= 'Exchange Server 2019 CU11';
       }
       $res= "Unknown version (build $FileVersion)"
       $Versions.GetEnumerator() | Sort-Object -Property {[System.Version]$_.Name} -Desc | ForEach {
@@ -997,7 +1041,7 @@ process {
     Function Disable-OpenFileSecurityWarning {
         Write-MyVerbose 'Disabling File Security Warning dialog'
         New-Item -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Associations' -ErrorAction SilentlyContinue |out-null
-        New-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Associations' -name 'LowRiskFileTypes' -value '.exe;.msp;.msu' -ErrorAction SilentlyContinue |out-null
+        New-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Associations' -name 'LowRiskFileTypes' -value '.exe;.msp;.msu;.msi' -ErrorAction SilentlyContinue |out-null
         New-Item -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Attachments' -ErrorAction SilentlyContinue |out-null
         New-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Attachments' -name 'SaveZoneInformation' -value 1 -ErrorAction SilentlyContinue |out-null
         Remove-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Associations' -Name 'LowRiskFileTypes' -ErrorAction SilentlyContinue
@@ -1037,6 +1081,11 @@ process {
                     $ArgumentList+= @( $FullName)
                     $ArgumentList+= @( '/f')
                     $Cmd= "$env:SystemRoot\System32\WUSA.EXE"
+                }
+                '.MSI' {
+                    $ArgumentList+= @( '/i')
+                    $ArgumentList+= @( $FullName)
+                    $Cmd= "MSIEXEC.EXE"
                 }
                 '.MSP' {
                     $ArgumentList+= @( '/update')
@@ -1210,9 +1259,10 @@ process {
         Else {
             $PresenceKey= 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{4934D1EA-BE46-48B1-8847-F1AF20E892C1}'
         }
+        
         If( $State['Recover']) {
             Write-MyOutput 'Wil run Setup in recover mode'
-            $Params= '/mode:RecoverServer', '/IAcceptExchangeServerLicenseTerms', '/DoNotStartTransport', '/InstallWindowsComponents'
+            $Params= '/mode:RecoverServer', $State['IAcceptSwitch'], '/DoNotStartTransport', '/InstallWindowsComponents'
             If( $State['TargetPath']) {
                 $Params+= "/TargetDir:`"$($State['TargetPath'])`""
             }
@@ -1220,7 +1270,7 @@ process {
         Else {
             If( $State['Upgrade']) {
                 Write-MyOutput 'Wil run Setup in upgrade mode'
-                $Params= '/mode:Upgrade', '/IAcceptExchangeServerLicenseTerms'
+                $Params= '/mode:Upgrade', $State['IAcceptSwitch']
             }
             Else {
                 $roles= @()
@@ -1243,7 +1293,7 @@ process {
                 If([string]::IsNullOrEmpty( $RolesParam)) {
                     $RolesParam= 'Mailbox'
                 }
-                $Params= '/mode:install', "/roles:$RolesParm", '/IAcceptExchangeServerLicenseTerms', '/DoNotStartTransport', '/InstallWindowsComponents'
+                $Params= '/mode:install', "/roles:$RolesParm", $State['IAcceptSwitch'], '/DoNotStartTransport', '/InstallWindowsComponents'
                 If( $State['InstallMailbox']) {
                     If( $State['InstallMDBName']) {
                         $Params+= "/MdbName:$($State['InstallMDBName'])"
@@ -1303,7 +1353,7 @@ process {
             If(!$State['InstallEdge']) {
                 Write-MyOutput "Preparing AD, Exchange organization will be $($State['OrganizationName'])"¨
             }
-            $params+= '/IAcceptExchangeServerLicenseTerms'
+            $params+= $State['IAcceptSwitch']
             StartWait-Process $State['SourcePath'] 'setup.exe' $params
             If( ( ( Test-ExchangeOrganization $State['OrganizationName']) -eq $null) -or
                 ( (Get-ExchangeForestLevel) -lt $MinFFL) -or
@@ -1330,8 +1380,8 @@ process {
                 }
                 
                 If( (is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL) -and (is-ServerCore) ) {
-			        $Feats+= 'Server-Media-Foundation'
-		        }
+                    $Feats+= 'Server-Media-Foundation'
+		}
                 break
             }
             default {
@@ -1364,6 +1414,22 @@ process {
                     If( !( $PresenceKey)){
                         # Alternative (Office2010FilterPack SP1)
                         $PresenceKey= (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\$ID" -Name 'DisplayName' -ErrorAction SilentlyContinue).DisplayName
+                        If( !( $PresenceKey)){
+                            # Check for installed Exchange IUs
+                            Switch( $State["MajorSetupVersion"]) {
+                                $EX2019_MAJOR {
+                                    $IUPath= 'Exchange 2019'
+                                }
+                                $EX2016_MAJOR {
+                                    $IUPath= 'Exchange 2016'
+                                }
+                                default {
+                                    # Ex2013
+                                    $IUPath= 'Exchange 2013'
+                                }
+                            }
+                            $PresenceKey= (Get-ItemProperty -Path ('HKLM:\Software\Microsoft\Updates\{0}\{1}' -f $IUPath, $ID) -Name 'PackageName' -ErrorAction SilentlyContinue).PackageName
+                        }
                     }
                 }
             }
@@ -1823,7 +1889,7 @@ process {
             Exit $ERR_CANTCREATETEMPFOLDER
         }
 
-        If( ($MajorOSVersion -eq $WS2012R2_MAJOR) -or ($MajorOSVersion -eq $WS2016_MAJOR ) -or ($MajorOSVersion -eq $WS2019_MAJOR ) ) {
+        If( ($MajorOSVersion -eq $WS2012R2_MAJOR) -or ($MajorOSVersion -eq $WS2016_MAJOR ) -or (is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL) ) {
             Write-MyOutput "Operating System is $($MajorOSVersion).$($MinorOSVersion)"
         }
         Else {
@@ -1847,7 +1913,7 @@ process {
         If( $State['AutoPilot']) {
             If( -not( $State['AdminAccount'] -and $State['AdminPassword'])) {
                 Try {
-		            $Script:Credentials= Get-Credential -UserName ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -Message 'Enter credentials to use'
+		    $Script:Credentials= Get-Credential -UserName ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -Message 'Enter credentials to use'
                     $State['AdminAccount']= $Credentials.UserName
                     $State['AdminPassword']= ($Credentials.Password | ConvertFrom-SecureString)
                 }
@@ -1925,8 +1991,9 @@ process {
             Write-MyOutput "Exchange setup located at $(Join-Path $($State['SourcePath']) "setup.exe")"
         }
 
-        $SetupVersion= File-DetectVersion "$($State['SourcePath'])\Setup\ServerRoles\Common\ExSetup.exe"
-	    $State['SetupVersionText']= Setup-TextVersion $SetupVersion
+        $State['ExSetupVersion']= File-DetectVersion "$($State['SourcePath'])\Setup\ServerRoles\Common\ExSetup.exe"
+        $SetupVersion= $State['ExSetupVersion']
+	$State['SetupVersionText']= Setup-TextVersion $SetupVersion
         Write-MyOutput ('ExSetup version: {0}' -f $State['SetupVersionText'])
         If( $SetupVersion) {
             $Num= $SetupVersion.split('.') | ForEach-Object { [string]([int]$_)}
@@ -1972,6 +2039,21 @@ process {
                 }
             }
         }
+
+        If( ($State["MajorSetupVersion"] -eq $EX2019_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2019SETUPEXE_CU11)) -or
+            ($State["MajorSetupVersion"] -eq $EX2016_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2016SETUPEXE_CU22))) {
+            If( $State['DiagnosticData']) {
+                $State['IAcceptSwitch']= '/IAcceptExchangeServerLicenseTerms_DiagnosticDataON'
+                Write-MyOutput 'Will deploy Exchange with Data Collection enabled'
+            }
+            Else {
+                 $State['IAcceptSwitch']= '/IAcceptExchangeServerLicenseTerms_DiagnosticDataOFF'
+            }
+        }
+        Else {
+             $State['IAcceptSwitch']= '/IAcceptExchangeServerLicenseTerms'
+        }
+
         if( !($State['InstallEdge'])){
             If( ( Test-ExistingExchangeServer $env:computerName) -and ($State["InstallPhase"] -eq 1)) {
                 If( $State['Recover']) {
@@ -2009,7 +2091,6 @@ process {
         Else {
             Write-MyVerbose 'Static IP address(es) assigned.'
         }
-
         If ( $State['TargetPath']) {
             $Location= Split-Path $State['TargetPath'] -Qualifier
             Write-MyOutput 'Checking installation path ..'
@@ -2145,8 +2226,7 @@ process {
 
     Function Configure-HighPerformancePowerPlan {
         Write-MyVerbose 'Configuring Power Plan'
-        $p = Get-CimInstance -Name root\cimv2\power -Class win32_PowerPlan | Where-Object {$_.InstanceID -eq 'Microsoft:PowerPlan\{8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c}'}
-        $tmp= Invoke-CimMethod -InputObject $p -MethodName Activate
+        $null= Start-Process -FilePath 'powercfg.exe' -ArgumentList ('/setactive','8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c') -NoNewWindow -PassThru -Wait
         $CurrentPlan = Get-WmiObject -Namespace root\cimv2\power -Class win32_PowerPlan | Where-Object { $_.IsActive }
         Write-MyOutput "Power Plan active: $($CurrentPlan.ElementName)"
     }
@@ -2464,6 +2544,7 @@ process {
             $State['SourceImage']= $null
             $State["SourcePath"]= $SourcePath
         }
+
         $State["SetupVersion"]= ( File-DetectVersion "$($State["SourcePath"])\setup.exe")
         $State["TargetPath"]= $TargetPath
         $State["AutoPilot"]= $AutoPilot
@@ -2485,6 +2566,7 @@ process {
         $State["DisableRC4"]= $DisableRC4
         $State["SkipRolesCheck"]= $SkipRolesCheck
         $State["SCP"]= $SCP
+        $State["DiagnosticData"]= $DiagnosticData
         $State["Lock"]= $Lock
         $State["EdgeDNSSuffix"]= $EdgeDNSSuffix
         $State["InstallPath"]= $InstallPath
@@ -2500,7 +2582,7 @@ process {
         }
 
         # Store Server Manager state
-        $State['DoNotOpenServerManagerAtLogon']= Get-ItemProperty -Path 'HKCU:\Software\Microsoft\ServerManager' -Name DoNotOpenServerManagerAtLogon -ErrorAction SilentlyContinue
+        $State['DoNotOpenServerManagerAtLogon']= (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\ServerManager' -Name DoNotOpenServerManagerAtLogon -ErrorAction SilentlyContinue).DoNotOpenServerManagerAtLogon
 
         $State["Verbose"]= $VerbosePreference
 
@@ -2576,7 +2658,7 @@ process {
       }
 
       Write-MyVerbose 'Disabling Server Manager at logon'
-      New-ItemProperty -Path 'HKCU:\Software\Microsoft\ServerManager' -Name DoNotOpenServerManagerAtLogon -Value 1 -PropertyType REG_DWORD -Force -ErrorAction SilentlyContinue
+      New-ItemProperty -Path 'HKCU:\Software\Microsoft\ServerManager' -Name DoNotOpenServerManagerAtLogon -Value 1 -PropertyType DWord -Force -ErrorAction SilentlyContinue
 
       Switch ($State["InstallPhase"]) {
         1 {
@@ -2686,7 +2768,7 @@ process {
                 If( $State["Install48"]) {
                     Remove-NETFrameworkInstallBlock '4.8' '-' '48'
                     If( (Get-NETVersion) -lt $NETVERSION_48) {
-                        Package-Install "-" "Microsoft .NET Framework 4.8" "ndp48-x86-x64-allos-enu.exe" "https://download.visualstudio.microsoft.com/download/pr/7afca223-55d2-470a-8edc-6a1739ae3252/abd170b4b0ec15ad0222a809b761a036/ndp48-x86-x64-allos-enu.exe" ("/q", "/norestart")
+                        Package-Install "-" "Microsoft .NET Framework 4.8" "ndp48-x86-x64-allos-enu.exe" "https://download.visualstudio.microsoft.com/download/pr/2d6bb6b2-226a-4baa-bdec-798822606ff1/8494001c276a4b96804cde7829c04d7f/ndp48-x86-x64-allos-enu.exe" ("/q", "/norestart")
                     }
                     Else {
                         Write-MyOutput ".NET Framework 4.8 or later detected"
@@ -2798,13 +2880,13 @@ process {
             Switch( $MajorOSVersion) {
                 $WS2012R2_MAJOR {
                     Package-Install "KB3041832" "CPU usage is high when you use RPC over HTTP protocol in Windows 8.1 or Windows Server 2012 R2" "windows8.1-kb3041832-x64_67dff11777c5aca0f86f2b20862de4a7959fa2ea.msu" "http://download.windowsupdate.com/c/msdownload/update/software/htfx/2015/04/windows8.1-kb3041832-x64_67dff11777c5aca0f86f2b20862de4a7959fa2ea.msu" ("/quiet", "/norestart")
+                    Package-Install "KB2999226" "Update for Universal C Runtime in Windows" "Windows8.1-KB2999226-x64.msu" "https://download.microsoft.com/download/D/1/3/D13E3150-3BB2-4B22-9D8A-47EE2D609FFF/Windows8.1-KB2999226-x64.msu" ("/quiet", "/norestart")
                     break
                 }
                 $WS2016_MAJOR {
-                    # To prevent installation on WS2019
-                    If( is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL) {
+                    # To prevent installation on WS2019 which is also '10.0.x'
+                    If(-not( is-MinimalBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL)) {
                         Package-Install "KB3206632" "Cumulative Update for Windows Server 2016 for x64-based Systems" "windows10.0-kb3206632-x64_b2e20b7e1aa65288007de21e88cd21c3ffb05110.msu" "http://download.windowsupdate.com/d/msdownload/update/software/secu/2016/12/windows10.0-kb3206632-x64_b2e20b7e1aa65288007de21e88cd21c3ffb05110.msu" ("/quiet", "/norestart")
-                        break
                     }
                 }
             }
@@ -2817,8 +2899,19 @@ process {
             }
 
             If( -not (Get-VCRuntime -version '12.0') -and $State["VCRedist2013"] ) {
-                Package-Install "" "Visual C++ 2013 Redistributable" "vcredist_x64_2013.exe" "https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91DA-3737CD5CD6E3/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
+                Package-Install "" "Visual C++ 2013 Redistributable" "vcredist_x64_2013.exe" "https://download.visualstudio.microsoft.com/download/pr/10912041/cee5d6bca2ddbcd039da727bf4acb48a/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
             }
+
+            If( ($State["MajorSetupVersion"] -eq $EX2019_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2019SETUPEXE_CU10)) -or
+                ($State["MajorSetupVersion"] -eq $EX2016_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2016SETUPEXE_CU21))) {
+                Package-Install "{1D8E6291-B0D5-35EC-8441-6616F567A0F7}" "Microsoft Visual C++ 2010 Service Pack 1 Redistributable Package MFC Security Update" "vcredist_x64_2010.exe" "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
+            }
+
+            If( ($State["MajorSetupVersion"] -eq $EX2019_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2019SETUPEXE_CU11)) -or
+                ($State["MajorSetupVersion"] -eq $EX2016_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2016SETUPEXE_CU22))) {
+                Package-Install "{9BCA2118-F753-4A1E-BCF3-5A820729965C}" "URL Rewrite Module 2.1" "rewrite_amd64_en-US.msi" "https://download.microsoft.com/download/1/2/8/128E2E22-C1B9-44A4-BE2A-5859ED1D4592/rewrite_amd64_en-US.msi" ("/quiet", "/norestart")
+            }
+
         }
 
         3 {
@@ -2838,7 +2931,7 @@ process {
                 Write-MyOutput "Checking/Preparing Active Directory"
                 Prepare-Exchange
             }
-            
+
         }
 
         4 {
@@ -2907,41 +3000,113 @@ process {
               Write-MyOutput "Installing additional recommended hotfixes and security updates for Exchange"
 
               $ImagePathVersion= File-DetectVersion ( (Get-WMIObject -Query 'select * from win32_service where name="MSExchangeServiceHost"').PathName.Trim('"') )
-              Write-MyVerbose "Installed Exchange MSExchangeIS version is $ImagePathVersion"
+              Write-MyVerbose ('Installed Exchange MSExchangeIS version {0}' -f $ImagePathVersion)
 
-              Switch( $ImagePathVersion) {
-                $EX2013SETUPEXE_CU2 {
-                    Package-Install "KB2880833" "Security Update For Exchange Server 2013 CU2" "Exchange2013-KB2880833-x64-en.msp" "http://download.microsoft.com/download/3/D/A/3DA5AC0D-4B94-479E-957F-C7C66DE1B30F/Exchange2013-KB2880833-x64-en.msp" ("/passive", "/norestart")
-                    break
+              Switch( $State['ExSetupVersion']) {
+                $EX2019SETUPEXE_CU9 {
+                    Package-Install 'KB5003435' 'Security update for Microsoft Exchange Server 2019, 2016, and 2013: May 11, 2021' 'Exchange2019-KB5003435-x64-en.msp' 'https://download.microsoft.com/download/3/3/2/332845f4-72ec-4b60-b2ee-c30cc44434c5/Exchange2019-KB5003435-x64-en.msp' ('/passive', '/norestart')
                 }
-                $EX2013SETUPEXE_CU3 {
-                    Package-Install "KB2880833" "Security Update For Exchange Server 2013 CU3" "Exchange2013-KB2880833-x64-en.msp" "http://download.microsoft.com/download/0/E/3/0E3FFD83-FE6A-48B7-85F2-3EF92155EFBE/Exchange2013-KB2880833-x64-en.msp" ("/passive", "/norestart")
-                    break
+                $EX2019SETUPEXE_CU8 {
+                    Package-Install 'KB5003435' 'Security update for Microsoft Exchange Server 2019, 2016, and 2013: May 11, 2021' 'Exchange2019-KB5003435-x64-en.msp' 'https://download.microsoft.com/download/f/5/8/f5868796-a30d-4891-bd6a-36638d4fc700/Exchange2019-KB5003435-x64-en.msp' ('/passive', '/norestart')
                 }
-                $EX2013SETUPEXE_SP1 {
-                    Exchange2013-KB2938053-FixIt
-                    break
+                $EX2019SETUPEXE_CU7 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2019-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/e/e/b/eebfc26d-a170-4ffd-ad7c-7d73639603d6/Exchange2019-KB5000871-x64-en.msp' ('/passive', '/norestart')
                 }
-                $EX2013SETUPEXE_CU5 {
-                    DisableSharedCacheServiceProbe
-                    break
+                $EX2019SETUPEXE_CU6 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2019-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/b/b/d/bbda2043-1d3f-49b0-83c8-646619a45997/Exchange2019-KB5000871-x64-en.msp' ('/passive', '/norestart')
                 }
-                $EX2013SETUPEXE_CU6 {
-                    Exchange2013-KB2997355-FixIt
-                    break
+                $EX2019SETUPEXE_CU5 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2019-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/1/6/3/163330f6-9707-49f3-a75b-06ef88ebd739/Exchange2019-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2019SETUPEXE_CU4 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2019-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/2/9/a/29a75e9c-c4bb-4457-8681-77f33dc368e7/Exchange2019-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2019SETUPEXE_CU3 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2019-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/0/d/0/0d00b746-8927-4ad1-9f57-a727a0b23372/Exchange2019-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2019SETUPEXE_CU2 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2019-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/7/d/e/7deaff7a-9967-4dc4-8d35-8ba191bac632/Exchange2019-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2019SETUPEXE_CU1 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2019-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/5/d/f/5dfffbaa-6a19-48e6-ac96-2339a6ffb81c/Exchange2019-KB5000871-x64-en.msp' ('/passive', '/norestart')
                 }
                 $EX2019SETUPEXE_RTM {
                     Exchange2019-FixCipherSuite
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2019-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/d/a/b/dabcffe4-9f2b-4a40-8f51-e677e95439e4/Exchange2019-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU20 {
+                    Package-Install 'KB5003435' 'Security update for Microsoft Exchange Server 2019, 2016, and 2013: May 11, 2021' 'Exchange2016-KB5003435-x64-en.msp' 'https://download.microsoft.com/download/b/8/c/b8c73a56-8347-4b0b-97dd-4a84dbf138a3/Exchange2016-KB5003435-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU19 {
+                    Package-Install 'KB5003435' 'Security update for Microsoft Exchange Server 2019, 2016, and 2013: May 11, 2021' 'Exchange2016-KB5003435-x64-en.msp' 'https://download.microsoft.com/download/3/2/3/323a68cd-8841-407e-8dc5-899b3b204ce5/Exchange2016-KB5003435-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU18 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/0/e/4/0e4056bd-0d6d-4738-a43b-bf9e23b14298/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU17 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/a/1/b/a1b06d42-0da5-488e-a35f-e5cf64affb7d/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU16 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/2/b/1/2b118676-2689-4165-9771-5331d7407ffc/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU15 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/2/e/b/2eb77c36-891a-4ce7-a58a-9ba1ff9105ca/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU14 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/6/7/a/67aca2d7-3b6f-4a4e-9c84-049a82673a64/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU13 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/8/f/d/8fdda3d9-8335-4bb5-8ba5-7ad4358bfce1/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU12 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/6/0/8/60874fd7-888f-4d11-ba85-5fd569420c93/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU11 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/a/e/c/aec299e9-79dc-4191-8e54-0ba6c0b6de31/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU10 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/b/b/8/bb8f4377-bbd6-4784-a4b7-274f8859749f/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU9 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/b/f/e/bfea9f97-55b4-42df-9b79-3200e0f21488/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2016SETUPEXE_CU8 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2016-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/7/6/2/7629dc30-f56c-4881-bf94-eee754c52d9e/Exchange2016-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2013SETUPEXE_CU23 {
+                    Package-Install 'KB5003435' 'Security update for Microsoft Exchange Server 2019, 2016, and 2013: May 11, 2021' 'Exchange2013-KB5003435-x64-en.msp' 'https://download.microsoft.com/download/6/d/b/6db9b354-306c-4ad6-8cc2-c07ca896a4b7/Exchange2013-KB5003435-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2013SETUPEXE_CU22 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2013-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/7/7/1/77143a1f-3745-4f68-a236-b484c65ebc9f/Exchange2013-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2013SETUPEXE_CU21 {
+                    Package-Install 'KB5000871' 'Security Update for Microsoft Exchange Server 2019, 2016, and 2013: March 2, 2021' 'Exchange2013-KB5000871-x64-en.msp' 'https://download.microsoft.com/download/0/d/4/0d401b35-bcd6-4608-a286-542d70e0eeef/Exchange2013-KB5000871-x64-en.msp' ('/passive', '/norestart')
+                }
+                $EX2013SETUPEXE_CU6 {
+                    Exchange2013-KB2997355-FixIt
+                }
+                $EX2013SETUPEXE_CU5 {
+                    DisableSharedCacheServiceProbe
+                }
+                $EX2013SETUPEXE_SP1 {
+                    Exchange2013-KB2938053-FixIt
+                }
+                $EX2013SETUPEXE_CU3 {
+                    Package-Install "KB2880833" "Security Update For Exchange Server 2013 CU3" "Exchange2013-KB2880833-x64-en.msp" "http://download.microsoft.com/download/0/E/3/0E3FFD83-FE6A-48B7-85F2-3EF92155EFBE/Exchange2013-KB2880833-x64-en.msp" ("/passive", "/norestart")
+                }
+                $EX2013SETUPEXE_CU2 {
+                    Package-Install "KB2880833" "Security Update For Exchange Server 2013 CU2" "Exchange2013-KB2880833-x64-en.msp" "http://download.microsoft.com/download/3/D/A/3DA5AC0D-4B94-479E-957F-C7C66DE1B30F/Exchange2013-KB2880833-x64-en.msp" ("/passive", "/norestart")
                 }
                 default {
 
                 }
-
               }
+
               If( ($State["MajorSetupVersion"] -eq $EX2016_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2016SETUPEXE_CU10)) -or
                   ($State["MajorSetupVersion"] -eq $EX2013_MAJOR -and (is-MaximumBuild $State["SetupVersion"] $EX2013SETUPEXE_CU20))) {
                   Package-Install "{1D8E6291-B0D5-35EC-8441-6616F567A0F7}" "Microsoft Visual C++ 2010 Service Pack 1 Redistributable Package MFC Security Update" "vcredist_x64_2010.exe" "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe" ("/install", "/quiet", "/norestart")
               }
+
             }
         }
 
@@ -2963,7 +3128,7 @@ process {
 
             Write-MyVerbose 'Restoring Server Manager startup configuration'
             If( $State['DoNotOpenServerManagerAtLogon']) {
-                New-ItemProperty -Path 'HKCU:\Software\Microsoft\ServerManager' -Name DoNotOpenServerManagerAtLogon -Value $State['DoNotOpenServerManagerAtLogon'] -ErrorAction SilentlyContinue
+                New-ItemProperty -Path 'HKCU:\Software\Microsoft\ServerManager' -Name DoNotOpenServerManagerAtLogon -Value $State['DoNotOpenServerManagerAtLogon'] -Force -ErrorAction SilentlyContinue
             }
 
             if( !($State['InstallEdge'])){
