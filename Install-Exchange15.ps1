@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.6, September 28th, 2021
+    Version 3.61, March 23rd, 2022
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback 
@@ -278,6 +278,7 @@
             Added IIS URL Rewrite prereq for Ex2019CU11 & Ex2016 CU22
             Added support for KB2999226 on for WS2012R2
             Added DiagnosticData switch to set initial DataCollectionEnabled mode
+    3.61    Added mention of Exchange 2019
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -555,7 +556,7 @@ param(
 
 process {
 
-    $ScriptVersion                  = '3.6'
+    $ScriptVersion                  = '3.61'
 
     $ERR_OK                         = 0
     $ERR_PROBLEMADPREPARE	    = 1001
@@ -2028,7 +2029,7 @@ process {
                     Exit $ERR_UNKNOWNROLESSPECIFIED
                 }
                 If ( $State['InstallCAS']) {
-                    Write-MyWarning 'Exchange 2016 or later setup detected, will ignore InstallCAS switch'
+                    Write-MyWarning 'Exchange 2016/2019 setup detected, will ignore InstallCAS switch'
                 }
             }
             Else {
