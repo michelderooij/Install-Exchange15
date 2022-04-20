@@ -37,6 +37,13 @@ sources at provided location. After setup, alter the SCP value for this server.
 ```
 Perform a recovery installation.
 
+### Troubleshooting
+
+If you are not able to install Exchange using this script due to the error "Provided credentials don't seem to be valid", check the following things:
+- Did you use the full username (either domain\user OR user@domain)
+- Did you sign into WINDOWS using the domain administrator account (which also has schema admin permissions)
+- Did you provide the exact credentials used to sign into windows
+
 ### About
 
 For more information on this script, as well as usage and examples, see
