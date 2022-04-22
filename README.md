@@ -13,7 +13,7 @@ location for Install (UNC path with proper permissions) to re-use additional dow
 ### Requirements
 
 * Windows Server 2008 R2 SP1, Windows Server 2012, Windows Server 2012 R2, Windows Server 2016 (Exchange 2016 CU3+ only), 
-  or Windows Server 2019 (Desktop or Core, for Exchange 2019)
+  Windows Server 2019 (Desktop or Core, for Exchange 2019) or Windows Server 2022 (for Exchange 2019 CU12+)
 * Domain-joined system. (Except for Edge)
 * "AutoPilot" mode requires account with elevated administrator privileges.
 * When you let the script prepare AD, the account needs proper permissions.
