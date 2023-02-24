@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.7, April 22th, 2022
+    Version 3.71, February 24th, 2023
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback 
@@ -281,11 +281,12 @@
             Added support for KB2999226 on for WS2012R2
             Added DiagnosticData switch to set initial DataCollectionEnabled mode
     3.61    Added mention of Exchange 2019
-    3.62    Added support for Exchange 2019 CU11
+    3.62    Added support for Exchange 2019 CU12
             Added support for Exchange 2016 CU23
     3.7     Added support for Windows Server 2022
             Fixed logic for installing the IIS Rewrite module for Ex2016CU22+/Ex2019CU11+
             Fixed logic when to use the new /IAcceptExchangeServerLicenseTerms_DiagnosticData* switch
+    3.71    Updated recommended Defender AV inclusions/exclusions
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -2390,9 +2391,7 @@ process {
                 "$InstallFolder\TransportRoles|Logs,Pickup,Replay",
                 "$InstallFolder\UnifiedMessaging|Grammars,Prompts,Temp,VoiceMail",
                 "$InstallFolder|Working\OleConverter",
-                "$SystemRoot\Microsoft.NET\Framework64\v4.0.30319|Temporary ASP.NET Files",
                 "$SystemDrive\InetPub\Temp|IIS Temporary Compressed Files",
-                "$SystemRoot|System32\InetSrv",
                 "$SystemDrive|Temp\OICE_*"
             )
 
@@ -2417,12 +2416,10 @@ process {
                 "$InstallFolder\Bin|ComplianceAuditService.exe,Microsoft.Exchange.Directory.TopologyService.exe,Microsoft.Exchange.EdgeSyncSvc.exe,Microsoft.Exchange.Notifications.Broker.exe,Microsoft.Exchange.ProtectedServiceHost.exe,Microsoft.Exchange.RPCClientAccess.Service.exe,Microsoft.Exchange.Search.Service.exe,Microsoft.Exchange.Store.Service.exe,Microsoft.Exchange.Store.Worker.exe,MSExchangeCompliance.exe,MSExchangeDagMgmt.exe,MSExchangeDelivery.exe,MSExchangeFrontendTransport.exe,MSExchangeMailboxAssistants.exe,MSExchangeMailboxReplication.exe,MSExchangeRepl.exe,MSExchangeSubmission.exe,MSExchangeThrottling.exe,OleConverter.exe,UmService.exe,UmWorkerProcess.exe,wsbexchange.exe,EdgeTransport.exe,Microsoft.Exchange.AntispamUpdateSvc.exe,Microsoft.Exchange.Diagnostics.Service.exe,Microsoft.Exchange.Servicehost.exe,MSExchangeHMHost.exe,MSExchangeHMWorker.exe,MSExchangeTransport.exe,MSExchangeTransportLogSearch.exe",
                 "$InstallFolder\FIP-FS\Bin|fms.exe,ScanEngineTest.exe,ScanningProcess.exe,UpdateService.exe",
                 "$InstallFolder|Bin\Search\Ceres|HostController\HostControllerService.exe,Runtime\1.0\Noderunner.exe,ParserServer\ParserServer.exe",
-                "$SystemRoot\System32\InetSrv|inetinfo.exe,W3wp.exe",
                 "$InstallFolder|FrontEnd\PopImap|Microsoft.Exchange.Imap4.exe,Microsoft.Exchange.Pop3.exe",
                 "$InstallFolder|ClientAccess\PopImap\Microsoft.Exchange.Imap4service.exe,Microsoft.Exchange.Pop3service.exe",
                 "$InstallFolder|FrontEnd\CallRouter|Microsoft.Exchange.UM.CallRouter.exe",
-                "$InstallFolder|TransportRoles\agents\Hygiene\Microsoft.Exchange.ContentFilter.Wrapper.exe",
-                "$SystemRoot\System32\WindowsPowerShell\v1.0\Powershell.exe"
+                "$InstallFolder|TransportRoles\agents\Hygiene\Microsoft.Exchange.ContentFilter.Wrapper.exe"
             )
 
             ForEach( $Process in $Processes) {
