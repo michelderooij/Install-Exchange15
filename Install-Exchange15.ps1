@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.71, February 24th, 2023
+    Version 3.8, May 4th, 2023
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback 
@@ -287,6 +287,7 @@
             Fixed logic for installing the IIS Rewrite module for Ex2016CU22+/Ex2019CU11+
             Fixed logic when to use the new /IAcceptExchangeServerLicenseTerms_DiagnosticData* switch
     3.71    Updated recommended Defender AV inclusions/exclusions
+    3.8     Added support for Exchange 2019 CU13
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -683,6 +684,7 @@ process {
     $EX2019SETUPEXE_CU10            = '15.02.0922.007'
     $EX2019SETUPEXE_CU11            = '15.02.0986.005'
     $EX2019SETUPEXE_CU12            = '15.02.1118.007'
+    $EX2019SETUPEXE_CU13            = '15.02.1258.012'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
@@ -789,6 +791,7 @@ process {
         $EX2019SETUPEXE_CU10= 'Exchange Server 2019 CU10';
         $EX2019SETUPEXE_CU11= 'Exchange Server 2019 CU11';
         $EX2019SETUPEXE_CU12= 'Exchange Server 2019 CU12';
+        $EX2019SETUPEXE_CU13= 'Exchange Server 2019 CU13';
       }
       $res= "Unknown version (build $FileVersion)"
       $Versions.GetEnumerator() | Sort-Object -Property {[System.Version]$_.Name} -Desc | ForEach {
