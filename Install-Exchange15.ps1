@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.8, May 4th, 2023
+    Version 3.9, February 15th, 2024
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback 
@@ -32,7 +32,7 @@
       - Windows Server 2012 R2
       - Windows Server 2016 (Exchange 2016 CU3+ only)
       - Windows Server 2019 (Desktop or Core, Exchange 2019 only)
-      - Windows Server 2022 (Exchange 2019 only)
+      - Windows Server 2022 (Exchange	 2019 only)
     - Domain-joined system, except for Edge Server Role
     - "AutoPilot" mode requires account with elevated administrator privileges
     - When you let the script prepare AD, the account needs proper permissions
@@ -288,6 +288,14 @@
             Fixed logic when to use the new /IAcceptExchangeServerLicenseTerms_DiagnosticData* switch
     3.71    Updated recommended Defender AV inclusions/exclusions
     3.8     Added support for Exchange 2019 CU13
+    3.9     Added support for Exchange 2019 CU14
+            Added support for .NET Framework 4.8.1
+            Added NONET481 switch to use .NET 4.8 instead of 4.8.1 for Exchange 2019 CU14+
+            Added DoNotEnableEP and DoNotEnableEP_FEEWS switches for Exchange 2019 CU14+
+            Added deploying AUG2023 SUs for Ex2019CU13/Ex2019CU12/Ex2016CU23 when IncludeFixes specified
+            Changed example to show usage of iso as source
+            Added descriptive message when specifying invalid SourcePath 
+            Fixed detection source path when iso already mounted without drive letter assignment
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -366,6 +374,15 @@
     Prevents installing .NET Framework 4.8 and uses 4.7.2 when a supported Exchange version
     is being deployed.
 
+    .PARAMETER NONET481
+    Prevents installing .NET Framework 4.8.1 and uses 4.8 when deploying Exchange 2019 CU14+
+
+    .PARAMETER DoNotEnableEP
+    Do not enable Extended Protection on Exchange 2019 CU14+
+
+    .PARAMETER DoNotEnableEP_FEEWS
+    Do not enable Extended Protection on the Front-End EWS virtual directory on Exchange 2019 CU14+
+
     .PARAMETER DisableSSL3
     Disables SSL3 after setup.
 
@@ -394,7 +411,7 @@
     .\Install-Exchange15.ps1 -Organization Fabrikam -InstallMailbox -MDBDBPath C:\MailboxData\MDB1\DB -MDBLogPath C:\MailboxData\MDB1\Log -MDBName MDB1 -InstallPath C:\Install -AutoPilot -Credentials $Cred -SourcePath '\\server\share\Exchange 2013\mu_exchange_server_2013_x64_dvd_1112105' -SCP https://autodiscover.fabrikam.com/autodiscover/autodiscover.xml -Verbose
 
     .EXAMPLE
-    .\Install-Exchange15.ps1 -InstallMailbox -MDBName MDB3 -MDBDBPath C:\MailboxData\MDB3\DB\MDB3.edb -MDBLogPath C:\MailboxData\MDB3\Log -AutoPilot -SourcePath \\server\share\Exchange2013\mu_exchange_server_2013_x64_dvd_1112105 -Verbose
+    .\Install-Exchange15.ps1 -InstallMailbox -MDBName MDB3 -MDBDBPath C:\MailboxData\MDB3\DB\MDB3.edb -MDBLogPath C:\MailboxData\MDB3\Log -AutoPilot -SourcePath D:\Install\ExchangeServer2019-x64-CU14.ISO -Verbose
 
     .EXAMPLE
     $Cred=Get-Credential
@@ -407,14 +424,13 @@
     .\Install-Exchange15.ps1 -NoSetup -Autopilot -InstallPath \\server1\exfiles\\server1\sources\ex2013cu13
 
 #>
-
 [cmdletbinding(DefaultParameterSetName='AutoPilot')]
 param(
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
-	[ValidatePattern("(?# Organization Name can only consist of upper or lowercase A-Z, 0-9, spaces - not at beginning or end, hyphen or dash characters, can be up to 64 characters in length, and can't be empty)^[a-zA-Z0-9\-\�\�][a-zA-Z0-9\-\�\�\ ]{1,62}[a-zA-Z0-9\-\�\�]$")]
+	[ValidatePattern(('(?# Organization Name can only consist of upper or lowercase A-Z, 0-9, spaces - not at beginning or end, hyphen or dash characters, up to 64 characters in length, and cannot be empty)^[a-zA-Z0-9\-\–\—][a-zA-Z0-9\-\–\—\ ]{1,62}[a-zA-Z0-9\-\–\—]$'))]
 	[string]$Organization,
         [parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
         [switch]$InstallMultiRole,
@@ -451,7 +467,7 @@ param(
 	[parameter( Mandatory=$true, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
-        [ValidateScript({ (Test-Path -Path $_ -PathType Container) -or (Get-DiskImage -ImagePath $_) })]
+        [ValidateScript({ If((Test-Path -Path $_ -PathType Container) -or (Get-DiskImage -ImagePath $_)) { $true } Else { Throw ('Specified source path or image {0} not found or inaccessible' -f $_)} })]
 	[string]$SourcePath,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
@@ -505,6 +521,24 @@ param(
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
         [Switch]$NoNet48,
+ 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
+        [Switch]$NoNet481,
+ 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
+        [Switch]$DoNotEnableEP,
+ 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
+	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
+        [Switch]$DoNotEnableEP_FEEWS,
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
@@ -565,7 +599,7 @@ param(
 
 process {
 
-    $ScriptVersion                  = '3.7'
+    $ScriptVersion                  = '3.9'
 
     $ERR_OK                         = 0
     $ERR_PROBLEMADPREPARE	    = 1001
@@ -685,6 +719,7 @@ process {
     $EX2019SETUPEXE_CU11            = '15.02.0986.005'
     $EX2019SETUPEXE_CU12            = '15.02.1118.007'
     $EX2019SETUPEXE_CU13            = '15.02.1258.012'
+    $EX2019SETUPEXE_CU14            = '15.02.1544.004'
 
     # Supported Operating Systems
     $WS2008R2_MAJOR                 = '6.1'
@@ -707,6 +742,7 @@ process {
     $NETVERSION_471                 = 461310
     $NETVERSION_472                 = 461814
     $NETVERSION_48                  = 528040
+    $NETVERSION_481                 = 533320
 
     Function Save-State( $State) {
         Write-MyVerbose "Saving state information to $StateFile"
@@ -792,6 +828,7 @@ process {
         $EX2019SETUPEXE_CU11= 'Exchange Server 2019 CU11';
         $EX2019SETUPEXE_CU12= 'Exchange Server 2019 CU12';
         $EX2019SETUPEXE_CU13= 'Exchange Server 2019 CU13';
+        $EX2019SETUPEXE_CU14= 'Exchange Server 2019 CU14';
       }
       $res= "Unknown version (build $FileVersion)"
       $Versions.GetEnumerator() | Sort-Object -Property {[System.Version]$_.Name} -Desc | ForEach {
@@ -1323,6 +1360,12 @@ process {
                 }
                 If( $State['TargetPath']) {
                     $Params+= "/TargetDir:`"$($State['TargetPath'])`""
+                }
+                If( $State['DoNotEnableEP']) {
+                    $Params+= "/DoNotEnableEP"
+                }
+                If( $State['DoNotEnableEP_FEEWS']) {
+                    $Params+= "/DoNotEnableEP_FEEWS"
                 }
             }
         }
@@ -2000,7 +2043,8 @@ process {
             }
         }
         Write-MyOutput 'Checking if we can access Exchange setup ..'
-        If(! (Test-Path $(Join-Path $($State['SourcePath']) "setup.exe"))) {
+
+        If(! (Test-Path (Join-Path $State['SourcePath'] "setup.exe"))) {
             Write-MyError "Can't find Exchange setup at $($State['SourcePath'])"
             Exit $ERR_MISSINGEXCHANGESETUP
         }
@@ -2029,7 +2073,7 @@ process {
             Exit $ERR_UNEXPECTEDOS
         }
         If( (is-MinimumBuild $SetupVersion $EX2019SETUPEXE_RTM)) {
-            If( -not ( (is-MinimumBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL) -or (is-MinimumBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2022_PREFULL) ) )  {
+            If( -not ( (is-MinimumBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2019_PREFULL) -or (is-MinimumBuild -BuildNumber $FullOSVersion -ReferenceBuildNumber $WS2022_PREFULL) ) ) {
                 Write-MyError 'Exchange Server 2019 is only supported on Windows Server 2019 or Windows Server 2022.'
                 Exit $ERR_UNEXPECTEDOS
             }
@@ -2061,6 +2105,17 @@ process {
                     Exit $ERR_UNKNOWNROLESSPECIFIED
                 }
             }
+        }
+
+        If( $State["MajorSetupVersion"] -eq $EX2019_MAJOR -and -not (is-MinimumBuild $State["SetupVersion"] $EX2019SETUPEXE_CU14) ) {
+            If( $State['DoNotEnableEP']) {
+                Write-MyWarning 'DoNotEnableEP is not supported with this Exchange version, ignoring this switch'
+                $State['DoNotEnableEP']= $false
+            } 
+            If( $State['DoNotEnableEP_FEEWS']) {
+                Write-MyWarning 'DoNotEnableEP_FEEWS is not supported with this Exchange version, ignoring this switch'
+                $State['DoNotEnableEP_FEEWS']= $false
+            } 
         }
 
         If( ($State["MajorSetupVersion"] -eq $EX2019_MAJOR -and (is-MinimumBuild $State["SetupVersion"] $EX2019SETUPEXE_CU11) ) -or
@@ -2462,12 +2517,17 @@ process {
         Param ( 
             [String]$SourceImage
         )
-        $temp= Get-PSDrive
         $disk= Get-DiskImage -ImagePath $SourceImage -ErrorAction SilentlyContinue
         If( $disk) {
             If( $disk.Attached) {
                 $vol= $disk | Get-Volume -ErrorAction SilentlyContinue
-                $Drive= $vol.DriveLetter
+                If( $vol) {
+                    $Drive= $vol.DriveLetter
+                }
+                Else {
+                    Write-Verbose ('{0} already attached but no drive letter - will mount again' -f $SourceImage)
+                    $Drive= (Mount-DiskImage -ImagePath $SourceImage -PassThru | Get-Volume).DriveLetter
+                }
             }
             Else {
                 $Drive= (Mount-DiskImage -ImagePath $SourceImage -PassThru | Get-Volume).DriveLetter
@@ -2575,14 +2635,19 @@ process {
         $State["NoNet461"]= $NoNet461
         $State["NoNet471"]= $NoNet471
         $State["NoNet472"]= $NoNet472
+        $State["NoNet48"]= $NoNet48
         $State["Install461"]= $False
         $State["Install462"]= $False
         $State["Install471"]= $False
         $State["Install472"]= $False
+        $State["Install48"]= $False
+        $State["Install481"]= $False
         $State["VCRedist2012"]= $False
         $State["VCRedist2013"]= $False
         $State["DisableSSL3"]= $DisableSSL3
         $State["DisableRC4"]= $DisableRC4
+        $State["DoNotEnableEP"]= $DoNotEnableEP
+        $State["DoNotEnableEP_FEEWS"]= $DoNotEnableEP_FEEWS
         $State["SkipRolesCheck"]= $SkipRolesCheck
         $State["SCP"]= $SCP
         $State["DiagnosticData"]= $DiagnosticData
@@ -2609,7 +2674,7 @@ process {
     Else {
         # Run from saved parameters
         If( $State['SourceImage']) {
-            # Mount ISO image, and set SourcePath to mounted location
+            # Mount ISO image, and set SourcePath to actual mounted location to anticipate drive letter changes
             $State["SourcePath"]= Resolve-SourcePath -SourceImage $State['SourceImage']
         }
     }
@@ -2699,18 +2764,42 @@ process {
                                     If( ($State["MajorSetupVersion"] -ge $EX2016_MAJOR -and (is-MinimumBuild $State["SetupVersion"] $EX2016SETUPEXE_CU13)) -or
                                         ($State["MajorSetupVersion"] -eq $EX2013_MAJOR -and (is-MinimumBuild $State["SetupVersion"] $EX2013SETUPEXE_CU23))) {
                                         If( $State["NoNet48"]) {
-                                            If( $State["MajorSetupVersion"] -ge $EX2016_MAJOR -and (is-MinimumBuild $State["SetupVersion"] $EX2016SETUPEXE_CU15)) {
-                                                Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) found, will use .NET Framework 4.8"
-                                                $State["Install48"]= $True
+                                            If( (is-MinimumBuild $State["SetupVersion"] $EX2019SETUPEXE_CU14)) {
+                                                Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) found but NoNet48 specified, will use .NET Framework 4.8.1"
+                                                $State["Install481"]= $True
                                             }
                                             Else {
-                                                Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) found but NoNet48 specified, will use .NET Framework 4.7.2"
-                                                $State["Install472"]= $True
+                                                If( $State["MajorSetupVersion"] -ge $EX2016_MAJOR -and (is-MinimumBuild $State["SetupVersion"] $EX2016SETUPEXE_CU15)) {
+                                                    Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) found, will use .NET Framework 4.8"
+                                                    $State["Install48"]= $True
+                                                }
+                                                Else {
+                                                    Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) found but NoNet48 specified, will use .NET Framework 4.7.2"
+                                                    $State["Install472"]= $True
+                                                }
                                             }
                                         }
                                         Else {
-                                            Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) found, will use .NET Framework 4.8"
-                                            $State["Install48"]= $True
+                                            If( (is-MinimumBuild $State["SetupVersion"] $EX2019SETUPEXE_CU14)) {
+                                                If( $State["NoNet481"]) {
+                                                    Write-MyOutput ".NET Framework 4.8.1 supported, but NoNet481 specified - will use .NET Framework 4.8"
+                                                    $State["Install48"]= $True
+                                                }
+                                                Else {
+                                                    If( @($WS2022_MAJOR) -contains $MajorOSVersion) {
+                                                        Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) found, will use .NET Framework 4.8.1"
+                                                        $State["Install481"]= $True
+                                                    }
+                                                    Else {
+                                                        Write-MyOutput ".NET Framework 4.8.1 only supported on Windows Server 2022 - will use .NET Framework 4.8"
+                                                        $State["Install48"]= $True
+                                                    }
+                                                }
+                                            }
+                                            Else {
+                                                Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) found, will use .NET Framework 4.8"
+                                                $State["Install48"]= $True
+                                            }
                                         }
                                     } 
                                     Else {
@@ -2726,7 +2815,7 @@ process {
                                 # Set to install the Ex2016CU10+/Ex2013CU20+ required VC++ 2013 runtime
                                 $State["VCRedist2013"]= $True
                             }
-                            If( $State['Install472'] -or $State["Install48"]) {
+                            If( $State['Install472'] -or $State["Install48"] -or $State["Install481"]) {
                                 # Life is good
                             }
                             Else {
@@ -2746,7 +2835,27 @@ process {
                     If( $State["MajorSetupVersion"] -ge $EX2019_MAJOR) {
                         $State["VCRedist2012"]= $True
                         $State["VCRedist2013"]= $True
-                        $State["Install48"]= $True
+                        If( (is-MinimumBuild $State["SetupVersion"] $EX2019SETUPEXE_CU14)) {
+                            If( $State["NoNet481"]) {
+                                Write-MyOutput ".NET Framework 4.8.1 supported, but NoNet481 specified - will use .NET Framework 4.8"
+                                $State["Install48"]= $True
+                            }
+                            Else {
+                                If( @($WS2022_MAJOR) -contains $MajorOSVersion) {
+                                    Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) found, will use .NET Framework 4.8.1"
+                                    $State["Install481"]= $True
+                                }
+                                Else {
+                                    Write-MyOutput ".NET Framework 4.8.1 only supported on Windows Server 2022 - will use .NET Framework 4.8"
+                                    $State["Install48"]= $True
+                                }
+
+                            }
+                        }
+                        Else {
+                            Write-MyOutput "Exchange setup version ($($State["SetupVersion"])) found, will use .NET Framework 4.8"
+                            $State["Install48"]= $True
+                        }
                     }
                     Else {
                         If( $State["NoNet461"]) {
@@ -2782,10 +2891,21 @@ process {
             Write-MyOutput "Installing BITS module"
             Import-Module BITSTransfer
 
-            If( $State["Install461"] -or $State["Install462"] -or $State['Install471'] -or $State['Install472'] -or $State["Install48"]) {
+            If( $State["Install461"] -or $State["Install462"] -or $State['Install471'] -or $State['Install472'] -or $State["Install48"]  -or $State["Install481"]) {
+                # Check .NET FrameWork 4.8.1 needs to be installed
+                If( $State["Install481"]) {
+                    Remove-NETFrameworkInstallBlock '4.8.1' '-' '481'
+                    If( (Get-NETVersion) -lt $NETVERSION_481) {
+                        Package-Install "-" "Microsoft .NET Framework 4.8.1" "NDP481-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/4/b/2/cd00d4ed-ebdd-49ee-8a33-eabc3d1030e3/NDP481-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
+                    }
+                    Else {
+                        Write-MyOutput ".NET Framework 4.8.1 or later detected"
+                    }
+                }
                 # Check .NET FrameWork 4.8 needs to be installed
                 If( $State["Install48"]) {
                     Remove-NETFrameworkInstallBlock '4.8' '-' '48'
+                    Set-NETFrameworkInstallBlock '4.8.1' '-' '481'
                     If( (Get-NETVersion) -lt $NETVERSION_48) {
                         Package-Install "-" "Microsoft .NET Framework 4.8" "ndp48-x86-x64-allos-enu.exe" "https://download.visualstudio.microsoft.com/download/pr/2d6bb6b2-226a-4baa-bdec-798822606ff1/8494001c276a4b96804cde7829c04d7f/ndp48-x86-x64-allos-enu.exe" ("/q", "/norestart")
                     }
@@ -2795,8 +2915,9 @@ process {
                 }
                 # Check .NET FrameWork 4.7.2 needs to be installed
                 If( $State["Install472"]) {
-                    Set-NETFrameworkInstallBlock '4.8' '-' '48'
                     Remove-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
+                    Set-NETFrameworkInstallBlock '4.8' '-' '48'
+                    Set-NETFrameworkInstallBlock '4.8.1' '-' '481'
                     If( (Get-NETVersion) -lt $NETVERSION_472) {
                         Package-Install "KB4054530" "Microsoft .NET Framework 4.7.2" "NDP472-KB4054530-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/6/E/4/6E48E8AB-DC00-419E-9704-06DD46E5F81D/NDP472-KB4054530-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
                     }
@@ -2809,6 +2930,7 @@ process {
                     Remove-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
                     Set-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
                     Set-NETFrameworkInstallBlock '4.8' '-' '48'
+                    Set-NETFrameworkInstallBlock '4.8.1' '-' '481'
                     If( (Get-NETVersion) -lt $NETVERSION_471) {
                         Package-Install "KB4033342" "Microsoft .NET Framework 4.7.1" "NDP471-KB4033342-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/9/E/6/9E63300C-0941-4B45-A0EC-0008F96DD480/NDP471-KB4033342-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
                     }
@@ -2829,6 +2951,7 @@ process {
                         Set-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
                         Set-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
                         Set-NETFrameworkInstallBlock '4.8' '-' '48'
+                        Set-NETFrameworkInstallBlock '4.8.1' '-' '481'
                         If( (Get-NETVersion) -lt $NETVERSION_461) {
                             Package-Install "KB3102467" "Microsoft .NET Framework 4.6.1" "NDP461-KB3102436-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/E/4/1/E4173890-A24A-4936-9FC9-AF930FE3FA40/NDP461-KB3102436-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
                         }
@@ -2843,6 +2966,7 @@ process {
                         Set-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
                         Set-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
                         Set-NETFrameworkInstallBlock '4.8' '-' '48'
+                        Set-NETFrameworkInstallBlock '4.8.1' '-' '481'
                         If( (Get-NETVersion) -lt $NETVERSION_462) {
                             Package-Install "KB3102436" "Microsoft .NET Framework 4.6.2" "NDP462-KB3151800-x86-x64-AllOS-ENU.exe" "https://download.microsoft.com/download/F/9/4/F942F07D-F26F-4F30-B4E3-EBD54FABA377/NDP462-KB3151800-x86-x64-AllOS-ENU.exe" ("/q", "/norestart")
                         }
@@ -2864,6 +2988,7 @@ process {
                 }
             }
             Else {
+                Set-NETFrameworkInstallBlock '4.8.1' '-' '481'
                 Set-NETFrameworkInstallBlock '4.8' '-' '48'
                 Set-NETFrameworkInstallBlock '4.7.2' 'KB4054530' '472'
                 Set-NETFrameworkInstallBlock '4.7.1' 'KB4033342' '471'
@@ -3022,6 +3147,15 @@ process {
               Write-MyVerbose ('Installed Exchange MSExchangeIS version {0}' -f $ImagePathVersion)
 
               Switch( $State['ExSetupVersion']) {
+                $EX2019SETUPEXE_CU13 {
+                    Package-Install 'KB5030524' 'Version 2 of the security update for Microsoft Exchange Server 2019 and 2016: August 15, 2023' 'Exchange2019-KB5030524-x64-en.exe' 'https://download.microsoft.com/download/3/b/d/3bd41cd2-44b8-46b6-a235-89e15d55ed3c/Exchange2019-KB5030524-x64-en.exe' ('/passive')
+                }
+                $EX2019SETUPEXE_CU12 {
+                    Package-Install 'KB5030524' 'Version 2 of the security update for Microsoft Exchange Server 2019 and 2016: August 15, 2023' 'Exchange2019-KB5030524-x64-en.exe' 'https://download.microsoft.com/download/c/1/a/c1a9a39f-8abd-4fa4-bd55-d872d958b3d0/Exchange2019-KB5030524-x64-en.exe' ('/passive')
+                }
+                $EX2016SETUPEXE_CU23 {
+                    Package-Install 'KB5030524' 'Version 2 of the security update for Microsoft Exchange Server 2019 and 2016: August 15, 2023' 'Exchange2016-KB5030524-x64-en.exe' 'https://download.microsoft.com/download/3/8/c/38c31212-75aa-47ca-a5c2-59430c81d92e/Exchange2016-KB5030524-x64-en.exe' ('/passive')
+                }
                 $EX2019SETUPEXE_CU9 {
                     Package-Install 'KB5003435' 'Security update for Microsoft Exchange Server 2019, 2016, and 2013: May 11, 2021' 'Exchange2019-KB5003435-x64-en.msp' 'https://download.microsoft.com/download/3/3/2/332845f4-72ec-4b60-b2ee-c30cc44434c5/Exchange2019-KB5003435-x64-en.msp' ('/passive', '/norestart')
                 }
