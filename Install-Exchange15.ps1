@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 3.9, February 15th, 2024
+    Version 3.91, June 29th, 2024
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West, 
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback 
@@ -296,6 +296,8 @@
             Changed example to show usage of iso as source
             Added descriptive message when specifying invalid SourcePath 
             Fixed detection source path when iso already mounted without drive letter assignment
+    3.91    Added DoNotDisableLegacyTLS switch & disabling TLS10 & TLS11
+            Added DoNotEnableTLS12 switch & enabling TLS12
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -382,6 +384,12 @@
 
     .PARAMETER DoNotEnableEP_FEEWS
     Do not enable Extended Protection on the Front-End EWS virtual directory on Exchange 2019 CU14+
+
+    .PARAMETER DoNotDisableLegacyTLS
+    Do not disable legacy TLS protocols (TLS10 and TLS11)
+
+    .PARAMETER DoNotEnableTLS12
+    Do not enable TLS 1.2 
 
     .PARAMETER DisableSSL3
     Disables SSL3 after setup.
@@ -560,7 +568,21 @@ param(
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
         [Switch]$DisableRC4,
-	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
+    [parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
+    [parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
+    [parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
+    [parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
+    [parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
+    [parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
+        [Switch]$DoNotDisableLegacyTLS,
+    [parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
+    [parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
+    [parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='E')]
+    [parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
+    [parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='NoSetup')]
+    [parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='Recover')]
+        [Switch]$DoNotEnableTLS12,
+    [parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='C')]
  	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='M')]
 	[parameter( Mandatory=$false, ValueFromPipelineByPropertyName=$false, ParameterSetName='CM')]
         [ValidateScript({ ($_ -eq '') -or ($_ -eq '-') -or (([System.URI]$_).AbsoluteUri -ne $null)})]
@@ -2392,6 +2414,55 @@ process {
         New-ItemProperty -Path $RegKey -Name $RegName  -Value 900000 -ErrorAction SilentlyContinue| out-null
     }
 
+    Function Disable-LegacyTLS {
+        Write-MyVerbose 'Disabling TLS 1.0 and TLS 1.1'
+
+        $RegKey= 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0'
+        New-Item -Path $RegKey -Name 'Client' -ErrorAction SilentlyContinue -Force | Out-Null
+        New-Item -Path $RegKey -Name 'Server' -ErrorAction SilentlyContinue -Force | Out-Null
+        Set-ItemProperty -Path ('{0}\Client' -f $RegKey) -Name 'DisabledByDefault' -Value 1 -Type DWord | Out-Null
+        Set-ItemProperty -Path ('{0}\Client' -f $RegKey) -Name 'Enabled' -Value 0 -Type DWord | Out-Null
+        Set-ItemProperty -Path ('{0}\Server' -f $RegKey) -Name 'DisabledByDefault' -Value 1 -Type DWord | Out-Null
+        Set-ItemProperty -Path ('{0}\Server' -f $RegKey) -Name 'Enabled' -Value 0 -Type DWord | Out-Null
+
+        $RegKey= 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1'
+        New-Item -Path $RegKey -Name 'Client' -ErrorAction SilentlyContinue -Force | Out-Null
+        New-Item -Path $RegKey -Name 'Server' -ErrorAction SilentlyContinue -Force | Out-Null
+        Set-ItemProperty -Path ('{0}\Client' -f $RegKey) -Name 'DisabledByDefault' -Value 1 -Type DWord | Out-Null
+        Set-ItemProperty -Path ('{0}\Client' -f $RegKey) -Name 'Enabled' -Value 0 -Type DWord | Out-Null
+        Set-ItemProperty -Path ('{0}\Server' -f $RegKey) -Name 'DisabledByDefault' -Value 1 -Type DWord | Out-Null
+        Set-ItemProperty -Path ('{0}\Server' -f $RegKey) -Name 'Enabled' -Value 0 -Type DWord | Out-Null
+    }
+
+    Function Enable-TLS12 {
+        Write-MyVerbose 'Enabling TLS 1.2'
+
+        New-Item 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v2.0.50727' -Force | Out-Null
+        New-ItemProperty -path 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v2.0.50727' -name 'SystemDefaultTlsVersions' -value '1' -PropertyType 'DWord' -Force | Out-Null
+        New-ItemProperty -path 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v2.0.50727' -name 'SchUseStrongCrypto' -value '1' -PropertyType 'DWord' -Force | Out-Null
+
+        New-Item 'HKLM:\SOFTWARE\Microsoft\.NETFramework\v2.0.50727' -Force | Out-Null
+        New-ItemProperty -path 'HKLM:\SOFTWARE\Microsoft\.NETFramework\v2.0.50727' -name 'SystemDefaultTlsVersions' -value '1' -PropertyType 'DWord' -Force | Out-Null
+        New-ItemProperty -path 'HKLM:\SOFTWARE\Microsoft\.NETFramework\v2.0.50727' -name 'SchUseStrongCrypto' -value '1' -PropertyType 'DWord' -Force | Out-Null
+
+        New-Item 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319' -Force | Out-Null
+        New-ItemProperty -path 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319' -name 'SystemDefaultTlsVersions' -value '1' -PropertyType 'DWord' -Force | Out-Null
+        New-ItemProperty -path 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319' -name 'SchUseStrongCrypto' -value '1' -PropertyType 'DWord' -Force | Out-Null
+
+        New-Item 'HKLM:\SOFTWARE\Microsoft\.NETFramework\v4.0.30319' -Force | Out-Null
+        New-ItemProperty -path 'HKLM:\SOFTWARE\Microsoft\.NETFramework\v4.0.30319' -name 'SystemDefaultTlsVersions' -value '1' -PropertyType 'DWord' -Force | Out-Null
+        New-ItemProperty -path 'HKLM:\SOFTWARE\Microsoft\.NETFramework\v4.0.30319' -name 'SchUseStrongCrypto' -value '1' -PropertyType 'DWord' -Force | Out-Null
+
+        New-Item 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Server' -Force | Out-Null
+        New-ItemProperty -path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Server' -name 'Enabled' -value '1' -PropertyType 'DWord' -Force | Out-Null
+        New-ItemProperty -path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Server' -name 'DisabledByDefault' -value 0 -PropertyType 'DWord' -Force | Out-Null
+
+        New-Item 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client' -Force | Out-Null
+        New-ItemProperty -path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client' -name 'Enabled' -value '1' -PropertyType 'DWord' -Force | Out-Null
+        New-ItemProperty -path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client' -name 'DisabledByDefault' -value 0 -PropertyType 'DWord' -Force | Out-Null
+
+    }
+
     Function Disable-SSL3 {
         # SSL3 disabling/Poodle, https://support.microsoft.com/en-us/kb/187498
         Write-MyVerbose 'Disabling SSL3 protocol for services'
@@ -2646,6 +2717,8 @@ process {
         $State["VCRedist2013"]= $False
         $State["DisableSSL3"]= $DisableSSL3
         $State["DisableRC4"]= $DisableRC4
+        $State["DisableLegacyTLS"]= $DoNotDisableLegacyTLS
+        $State["DoNotEnableTLS12"]= $DoNotEnableTLS12
         $State["DoNotEnableEP"]= $DoNotEnableEP
         $State["DoNotEnableEP_FEEWS"]= $DoNotEnableEP_FEEWS
         $State["SkipRolesCheck"]= $SkipRolesCheck
@@ -3119,6 +3192,12 @@ process {
             }
             If( $State["DisableRC4"]) {
                 Disable-RC4
+            }
+            If(-not $State["DoNotEnableTLS12"]) {
+                Enable-TLS12
+            }
+            If(-not $State["DoNotDisableLegacyTLS"]) {
+                Disable-LegacyTLS
             }
             Start-7318DrainNGenQueue
 
