@@ -317,6 +317,7 @@
             Set minimal required PS version to 5.1
             Code cleanup
             Functions now use approved verbs
+    4.01    Removed obsolete TLS13 setup detection
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -1627,7 +1628,7 @@ process {
         $State['MajorSetupVersion'] = $MajorSetupVersion
         $State['MinorSetupVersion'] = $MinorSetupVersion
 
-        If( ($MajorSetupVersion -eq $EX2019_MAJOR -and [System.Version]$SetupVersion -lt [System.Version]$EX2019SETUPEXE_CU10) -or 
+        If( ($MajorSetupVersion -eq $EX2019_MAJOR -and [System.Version]$SetupVersion -lt [System.Version]$EX2019SETUPEXE_CU10) -or
             ($MajorSetupVersion -eq $EX2016_MAJOR -and [System.Version]$SetupVersion -lt [System.Version]$EX2016SETUPEXE_CU23) ) {
             Write-MyError 'Unsupported version of Exchange detected; only Exchange 2019 CU10 or later, or Exchange 2016 CU23 are supported'
             Exit $ERR_UNSUPPORTEDEX
@@ -2470,12 +2471,6 @@ process {
 
             # URL Rewrite module
             Install-MyPackage "{9BCA2118-F753-4A1E-BCF3-5A820729965C}" "URL Rewrite Module 2.1" "rewrite_amd64_en-US.msi" "https://download.microsoft.com/download/1/2/8/128E2E22-C1B9-44A4-BE2A-5859ED1D4592/rewrite_amd64_en-US.msi" ("/quiet", "/norestart")
-
-            # If needed, configure TLS13 blocker for WS2022+/EX2019CU15+
-            If( $State['EnableTLS13'] -and [System.Version]$FullOSVersion -ge [System.Version]$WS2022_PREFULL -and [System.Version]$State["SetupVersion"] -ge [System.Version]$EX2019SETUPEXE_CU15) {
-                Write-MyOutput ('Configuring skip TLS13 activation during Exchange setup')
-                Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup" -Name "SkipTLS13ActivationDuringSetup" -Value 1 -Type String
-            }
 
         }
 
