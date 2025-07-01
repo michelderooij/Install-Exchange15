@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 4.01, February 17th, 2024
+    Version 4.10, July 2nd, 2025
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West,
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback
@@ -89,7 +89,7 @@
             Added KB2997355 (Exchange Online mailboxes cannot be managed by using EAC)
             Added .NET Framework 4.52
             Removed DisableRetStructPinning (not required for .NET 4.52 or later)
-    1.8     Added CU7 support
+7    1.8     Added CU7 support
     1.9     Added CU8 support
             Fixed CU6/CU7 detection
             Added (temporary) clearing of Execution Policy GPO value
@@ -318,6 +318,7 @@
             Code cleanup
             Functions now use approved verbs
     4.01    Removed obsolete TLS13 setup detection
+    4.10    Added support for Exchange Server SE
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -567,7 +568,7 @@ param(
 
 process {
 
-    $ScriptVersion                  = '4.0'
+    $ScriptVersion                  = '4.1'
 
     $ERR_OK                         = 0
     $ERR_PROBLEMADPREPARE	    = 1001
@@ -627,6 +628,7 @@ process {
     $EX2019SETUPEXE_CU13            = '15.02.1258.012'
     $EX2019SETUPEXE_CU14            = '15.02.1544.004'
     $EX2019SETUPEXE_CU15            = '15.02.1748.008'
+    $EXSESETUPEXE_RTM               = '15.02.2562.017'
 
     # Supported Operating Systems
     $WS2016_MAJOR                   = '10.0'
@@ -674,6 +676,7 @@ process {
         $EX2019SETUPEXE_CU13= 'Exchange Server 2019 CU13';
         $EX2019SETUPEXE_CU14= 'Exchange Server 2019 CU14';
         $EX2019SETUPEXE_CU15= 'Exchange Server 2019 CU15';
+        $EXSESETUPEXE_RTM= 'Exchange Server SE RTM';
       }
       $res= "Unsupported version (build $FileVersion)"
       $Versions.GetEnumerator() | Sort-Object -Property {[System.Version]$_.Name} | ForEach-Object {
@@ -1630,14 +1633,14 @@ process {
 
         If( ($MajorSetupVersion -eq $EX2019_MAJOR -and [System.Version]$SetupVersion -lt [System.Version]$EX2019SETUPEXE_CU10) -or
             ($MajorSetupVersion -eq $EX2016_MAJOR -and [System.Version]$SetupVersion -lt [System.Version]$EX2016SETUPEXE_CU23) ) {
-            Write-MyError 'Unsupported version of Exchange detected; only Exchange 2019 CU10 or later, or Exchange 2016 CU23 are supported'
+            Write-MyError 'Unsupported version of Exchange detected; only Exchange SE, Exchange 2019 CU10 or later, or Exchange 2016 CU23 are supported'
             Exit $ERR_UNSUPPORTEDEX
         }
 
         If( [System.Version]$SetupVersion -ge $EX2019SETUPEXE_CU15) {
             $Ex2013Exists= Get-ExchangeServerObjects | Where-Object {$_.serialNumber[0] -like 'Version 15.0*'}
             If( $Ex2013Exists) {
-                Write-MyError ('Exchange 2013 detected: {0}. Exchange 2019 CU15+ cannot co-exist with Exchange 2013' -f ($Ex2013Exists | Select-Object Name) -Join ',')
+                Write-MyError ('Exchange 2013 detected: {0}. Exchange 2019 CU15 or later cannot co-exist with Exchange 2013' -f ($Ex2013Exists | Select-Object Name) -Join ',')
                 Exit $ERR_EX19EX2013COEXIST
             }
         }
@@ -1648,7 +1651,7 @@ process {
         }
 
         If( [System.Version]$FullOSVersion -lt $WS2019_PREFULL -and [System.Version]$MajorSetupVersion -lt [System.Version]$EX2019_MAJOR) {
-            Write-MyError 'Exchange 2019 is only supported on Windows Server 2019, Windows Server 2022 or Windows Server 2025 (CU15+)'
+            Write-MyError 'Exchange 2019/SE is only supported on Windows Server 2019, Windows Server 2022 or Windows Server 2025 (CU15+)'
             Exit $ERR_UNEXPECTEDOS
         }
 
