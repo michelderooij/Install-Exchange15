@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 4.10, July 2nd, 2025
+    Version 4.11, July 9th, 2025
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West,
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback
@@ -319,6 +319,7 @@
             Functions now use approved verbs
     4.01    Removed obsolete TLS13 setup detection
     4.10    Added support for Exchange Server SE
+    4.11    Fixed feature installation for WS2022/WS2025 Core
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -568,7 +569,7 @@ param(
 
 process {
 
-    $ScriptVersion                  = '4.1'
+    $ScriptVersion                  = '4.11'
 
     $ERR_OK                         = 0
     $ERR_PROBLEMADPREPARE	    = 1001
@@ -1253,10 +1254,21 @@ process {
         }
         Else {
             If( [System.Version]$WS2019_PREFULL -ge [System.Version]$MajorOSVersion) {
+
                 # WS2019, WS2022, WS2025
-                $Feats= 'Server-Media-Foundation', 'NET-Framework-45-Core', 'NET-Framework-45-ASPNET', 'NET-WCF-HTTP-Activation45', 'NET-WCF-Pipe-Activation45', 'NET-WCF-TCP-Activation45', 'NET-WCF-TCP-PortSharing45', 'RPC-over-HTTP-proxy', 'RSAT-Clustering', 'RSAT-Clustering-CmdInterface', 'RSAT-Clustering-PowerShell', 'WAS-Process-Model', 'Web-Asp-Net45', 'Web-Basic-Auth', 'Web-Client-Auth', 'Web-Digest-Auth', 'Web-Dir-Browsing', 'Web-Dyn-Compression', 'Web-Http-Errors', 'Web-Http-Logging', 'Web-Http-Redirect', 'Web-Http-Tracing', 'Web-ISAPI-Ext', 'Web-ISAPI-Filter', 'Web-Metabase', 'Web-Mgmt-Service', 'Web-Net-Ext45', 'Web-Request-Monitor', 'Web-Server', 'Web-Stat-Compression', 'Web-Static-Content', 'Web-Windows-Auth', 'Web-WMI', 'RSAT-ADDS'
-                If( Test-ServerCore) {
-                    $Feats+= 'RSAT-Clustering-Mgmt', 'Web-Lgcy-Mgmt-Console', 'Web-Mgmt-Console', 'Windows-Identity-Foundation'
+                $Feats= 'Server-Media-Foundation', 'NET-Framework-45-Core', 'NET-Framework-45-ASPNET',
+                    'NET-WCF-HTTP-Activation45', 'NET-WCF-Pipe-Activation45', 'NET-WCF-TCP-Activation45',
+                    'NET-WCF-TCP-PortSharing45', 'RPC-over-HTTP-proxy', 'RSAT-Clustering',
+                    'RSAT-Clustering-CmdInterface', 'RSAT-Clustering-PowerShell', 'WAS-Process-Model',
+                    'Web-Asp-Net45', 'Web-Basic-Auth', 'Web-Client-Auth', 'Web-Digest-Auth',
+                    'Web-Dir-Browsing', 'Web-Dyn-Compression', 'Web-Http-Errors', 'Web-Http-Logging',
+                    'Web-Http-Redirect', 'Web-Http-Tracing', 'Web-ISAPI-Ext', 'Web-ISAPI-Filter',
+                    'Web-Metabase', 'Web-Mgmt-Service', 'Web-Net-Ext45', 'Web-Request-Monitor',
+                    'Web-Server', 'Web-Stat-Compression', 'Web-Static-Content', 'Web-W-Auth',
+                    'Web-WMI', 'RSAT-ADDS'
+
+                If( !( Test-ServerCore)) {
+                    $Feats+= 'RSAT-Clustering-Mgmt', 'Web-Mgmt-Console', 'Windows-Identity-Foundation'
                 }
             }
             Else {
