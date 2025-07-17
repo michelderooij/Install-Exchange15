@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 4.12, July 17th, 2025
+    Version 4.13, July 17th, 2025
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West,
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback
@@ -321,7 +321,8 @@
     4.10    Added support for Exchange Server SE
     4.11    Fixed feature installation for WS2022/WS2025 Core
     4.12    Fixed feature installation (Web-W-Auth, should be Web-Windows-Auth)
-            Using ADSI for Ex2013 detection (removed AD PS module dependency)
+            Using ADSI for Ex2013 detection
+    4.13    Fixed race issue when installing from ISO and restarting installation
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -1641,14 +1642,6 @@ process {
             Write-MyOutput "Exchange setup located at $(Join-Path $($State['SourcePath']) "setup.exe")"
         }
 
-        If( Get-DiskImage -ImagePath $State['SourcePath'] -ErrorAction SilentlyContinue) {
-            $State['SourceImage']= $State['SourcePath']
-            $State["SourcePath"]= Resolve-SourcePath -SourceImage $State['SourcePath']
-        }
-        Else {
-            $State['SourceImage']= $null
-            $State["SourcePath"]= $State['SourcePath']
-        }
         $State['ExSetupVersion']= Get-DetectedFileVersion "$($State['SourcePath'])\Setup\ServerRoles\Common\ExSetup.exe"
         $SetupVersion= $State['ExSetupVersion']
 	    $State['SetupVersionText']= Get-SetupTextVersion $SetupVersion
@@ -2317,8 +2310,13 @@ process {
             $State["SourcePath"]= Resolve-SourcePath -SourceImage $SourcePath
         }
         Else {
-            $State['SourceImage']= $null
-            $State["SourcePath"]= $SourcePath
+            If( $State['SourceImage']) {
+                $State["SourcePath"]= Resolve-SourcePath -SourceImage $State['SourceImage']
+            }
+            Else {
+                $State['SourceImage']= $null
+                $State["SourcePath"]= $SourcePath
+            }
         }
         $State["SetupVersion"]= ( Get-DetectedFileVersion "$($State["SourcePath"])\setup.exe")
         $State["TargetPath"]= $TargetPath
