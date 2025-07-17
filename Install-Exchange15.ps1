@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 4.11, July 9th, 2025
+    Version 4.12, July 17th, 2025
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West,
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback
@@ -320,6 +320,8 @@
     4.01    Removed obsolete TLS13 setup detection
     4.10    Added support for Exchange Server SE
     4.11    Fixed feature installation for WS2022/WS2025 Core
+    4.12    Fixed feature installation (Web-W-Auth, should be Web-Windows-Auth)
+            Using ADSI for Ex2013 detection (removed AD PS module dependency)
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -569,7 +571,7 @@ param(
 
 process {
 
-    $ScriptVersion                  = '4.11'
+    $ScriptVersion                  = '4.12'
 
     $ERR_OK                         = 0
     $ERR_PROBLEMADPREPARE	    = 1001
@@ -1102,7 +1104,20 @@ process {
 
     Function Get-ExchangeServerObjects {
         $CNC= Get-ForestConfigurationNC
-        Get-ADObject -Filter "ObjectCategory -eq 'msExchExchangeServer'" -SearchBase $CNC -Properties msExchCurrentServerRoles, networkAddress, serialNumber
+        $LDAPSearch= New-Object System.DirectoryServices.DirectorySearcher
+        $LDAPSearch.SearchRoot = "LDAP://$CNC"
+        $LDAPSearch.Filter = "(objectCategory=msExchExchangeServer)"
+        $LDAPSearch.PropertiesToLoad.Add("cn") | Out-Null
+        $LDAPSearch.PropertiesToLoad.Add("msExchCurrentServerRoles") | Out-Null
+        $LDAPSearch.PropertiesToLoad.Add("serialNumber") | Out-Null
+        $Results = $LDAPSearch.FindAll()
+        $Results | ForEach {
+            [pscustomobject][ordered]@{
+                CN= $_.Properties.cn[0]
+                msExchCurrentServerRoles= $_.Properties.msexchcurrentserverroles[0]
+                serialNumber= $_.Properties.serialnumber[0]
+            }
+        }
     }
 
     Function Set-EdgeDNSSuffix ([string]$DNSSuffix){
@@ -1264,7 +1279,7 @@ process {
                     'Web-Dir-Browsing', 'Web-Dyn-Compression', 'Web-Http-Errors', 'Web-Http-Logging',
                     'Web-Http-Redirect', 'Web-Http-Tracing', 'Web-ISAPI-Ext', 'Web-ISAPI-Filter',
                     'Web-Metabase', 'Web-Mgmt-Service', 'Web-Net-Ext45', 'Web-Request-Monitor',
-                    'Web-Server', 'Web-Stat-Compression', 'Web-Static-Content', 'Web-W-Auth',
+                    'Web-Server', 'Web-Stat-Compression', 'Web-Static-Content', 'Web-Windows-Auth',
                     'Web-WMI', 'RSAT-ADDS'
 
                 If( !( Test-ServerCore)) {
@@ -1626,6 +1641,14 @@ process {
             Write-MyOutput "Exchange setup located at $(Join-Path $($State['SourcePath']) "setup.exe")"
         }
 
+        If( Get-DiskImage -ImagePath $State['SourcePath'] -ErrorAction SilentlyContinue) {
+            $State['SourceImage']= $State['SourcePath']
+            $State["SourcePath"]= Resolve-SourcePath -SourceImage $State['SourcePath']
+        }
+        Else {
+            $State['SourceImage']= $null
+            $State["SourcePath"]= $State['SourcePath']
+        }
         $State['ExSetupVersion']= Get-DetectedFileVersion "$($State['SourcePath'])\Setup\ServerRoles\Common\ExSetup.exe"
         $SetupVersion= $State['ExSetupVersion']
 	    $State['SetupVersionText']= Get-SetupTextVersion $SetupVersion
@@ -2246,6 +2269,7 @@ process {
             Write-MyVerbose ('Found Visual C++ Runtime v{0}, build {1}' -f $version, $build)
         }
         Else {
+ 
             Write-MyVerbose ('Could not find Visual C++ v{0} Runtime installed' -f $version)
         }
         return $presence
@@ -2296,7 +2320,6 @@ process {
             $State['SourceImage']= $null
             $State["SourcePath"]= $SourcePath
         }
-
         $State["SetupVersion"]= ( Get-DetectedFileVersion "$($State["SourcePath"])\setup.exe")
         $State["TargetPath"]= $TargetPath
         $State["AutoPilot"]= $AutoPilot
