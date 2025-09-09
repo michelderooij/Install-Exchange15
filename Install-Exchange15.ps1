@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 4.13, July 17th, 2025
+    Version 4.14, September 9th, 2025
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West,
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback
@@ -89,7 +89,7 @@
             Added KB2997355 (Exchange Online mailboxes cannot be managed by using EAC)
             Added .NET Framework 4.52
             Removed DisableRetStructPinning (not required for .NET 4.52 or later)
-7    1.8     Added CU7 support
+    1.8     Added CU7 support
     1.9     Added CU8 support
             Fixed CU6/CU7 detection
             Added (temporary) clearing of Execution Policy GPO value
@@ -323,6 +323,9 @@
     4.12    Fixed feature installation (Web-W-Auth, should be Web-Windows-Auth)
             Using ADSI for Ex2013 detection
     4.13    Fixed race issue when installing from ISO and restarting installation
+            Tested with SW_DVD9_Exchange_Server_Subscription_64bit_MultiLang_Std_Ent_.iso_MLF_X24-08113.iso
+    4.14
+            Fixed some typos
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -572,10 +575,10 @@ param(
 
 process {
 
-    $ScriptVersion                  = '4.13'
+    $ScriptVersion                  = '4.14'
 
     $ERR_OK                         = 0
-    $ERR_PROBLEMADPREPARE	    = 1001
+    $ERR_PROBLEMADPREPARE	        = 1001
     $ERR_UNEXPECTEDOS               = 1002
     $ERR_UNEXPTECTEDPHASE           = 1003
     $ERR_PROBLEMADDINGFEATURE	    = 1004
@@ -885,7 +888,7 @@ process {
         } else {
             Add-Type -AssemblyName System.DirectoryServices.AccountManagement
             $DS = New-Object System.DirectoryServices.AccountManagement.PrincipalContext('machine',$ComputerName)
-            $DS.ValidateCredentials($UserName, $Password)
+            $DS.ValidateCredentials($UserName, $Password )
         }
     }
 
@@ -1112,7 +1115,7 @@ process {
         $LDAPSearch.PropertiesToLoad.Add("msExchCurrentServerRoles") | Out-Null
         $LDAPSearch.PropertiesToLoad.Add("serialNumber") | Out-Null
         $Results = $LDAPSearch.FindAll()
-        $Results | ForEach {
+        $Results | ForEach-Object {
             [pscustomobject][ordered]@{
                 CN= $_.Properties.cn[0]
                 msExchCurrentServerRoles= $_.Properties.msexchcurrentserverroles[0]
@@ -1246,7 +1249,7 @@ process {
         }
         If ($params.count -gt 0) {
             If(!$State['InstallEdge']) {
-                Write-MyOutput "Preparing AD, Exchange organization will be $($State['OrganizationName'])"¨
+                Write-MyOutput "Preparing AD, Exchange organization will be $($State['OrganizationName'])"
             }
             $params+= $State['IAcceptSwitch']
             Invoke-Process $State['SourcePath'] 'setup.exe' $params
@@ -2256,13 +2259,14 @@ process {
             $Key= (Get-ItemProperty -Path ($RegPath -f $version) -Name Installed -ErrorAction SilentlyContinue).Installed
             If( $Key -eq 1) {
                 $build= (Get-ItemProperty -Path ($RegPath -f $version) -Name Version -ErrorAction SilentlyContinue).Version
+                $presence= $true
             }
         }
         If( $presence) {
             Write-MyVerbose ('Found Visual C++ Runtime v{0}, build {1}' -f $version, $build)
         }
         Else {
- 
+
             Write-MyVerbose ('Could not find Visual C++ v{0} Runtime installed' -f $version)
         }
         return $presence
@@ -2409,8 +2413,8 @@ process {
         If( $State["AutoPilot"]) {
             Write-MyWarning "Reboot pending, will reboot system and rerun phase"
         }
-        Else {
-            Write-MyError "Reboot pending, please reboot system and restart script (parameters will be saved)"v
+            Write-MyError "Reboot pending, please reboot system and restart script (parameters will be saved)"
+            Write-MyError "Reboot pending, please reboot system and restart script (parameters will be saved)"
         }
     }
     Else {
