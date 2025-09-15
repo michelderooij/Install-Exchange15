@@ -8,14 +8,14 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 4.14, September 9th, 2025
+    Version 4.20, September 15th, 2025
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West,
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback
     or contributed in other ways.
 
     .DESCRIPTION
-    This script can install Exchange 2016/2019 prerequisites, optionally create the Exchange
+    This script can install Exchange 2016/2019/SE prerequisites, optionally create the Exchange
     organization (prepares Active Directory) and installs Exchange Server. When the AutoPilot switch is
     specified, it will do all the required rebooting and automatic logging on using provided credentials.
     To keep track of provided parameters and state, it uses an XML file; if this file is
@@ -324,8 +324,7 @@
             Using ADSI for Ex2013 detection
     4.13    Fixed race issue when installing from ISO and restarting installation
             Tested with SW_DVD9_Exchange_Server_Subscription_64bit_MultiLang_Std_Ent_.iso_MLF_X24-08113.iso
-    4.14
-            Fixed some typos
+    4.20    Clearing/setting SCP now background job during install to configure it asynchronous & ASAP
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -874,7 +873,6 @@ process {
         }
     }
 
-    #From https://gallery.technet.microsoft.com/scriptcenter/Verify-the-Local-User-1e365545
     function Test-LocalCredential {
         [CmdletBinding()]
         Param
@@ -1055,31 +1053,121 @@ process {
         return( ([ADSI]"LDAP://CN=Microsoft Exchange System Objects,$NC").objectVersion )
     }
 
-    Function Clear-AutodiscoverServiceConnectionPoint( [string]$Name) {
-        $CNC= Get-ForestConfigurationNC
-        $LDAPSearch= New-Object System.DirectoryServices.DirectorySearcher
-        $LDAPSearch.SearchRoot= "LDAP://$CNC"
-        $LDAPSearch.Filter= "(&(cn=$Name)(objectClass=serviceConnectionPoint)(serviceClassName=ms-Exchange-AutoDiscover-Service)(|(keywords=67661d7F-8FC4-4fa7-BFAC-E1D7794C1F68)(keywords=77378F46-2C66-4aa9-A6A6-3E7A48B19596)))"
-        $LDAPSearch.FindAll() | ForEach-Object {
-            Write-MyVerbose "Removing object $($_.Path)"
-            ([ADSI]($_.Path)).DeleteTree()
+    Function Clear-AutodiscoverServiceConnectionPoint( [string]$Name, [switch]$Wait) {
+        $ConfigNC = Get-ForestConfigurationNC
+        if ($Wait) {
+            $ScriptBlock = {
+                param($ServerName, $ConfigNC)
+                do {
+                    if ($null -ne $ConfigNC) {
+                        $LDAPSearch = New-Object System.DirectoryServices.DirectorySearcher
+                        $LDAPSearch.SearchRoot = 'LDAP://{0}' -f $ConfigNC
+                        $LDAPSearch.Filter = '(&(cn={0})(objectClass=serviceConnectionPoint)(serviceClassName=ms-Exchange-AutoDiscover-Service)(|(keywords=67661d7F-8FC4-4fa7-BFAC-E1D7794C1F68)(keywords=77378F46-2C66-4aa9-A6A6-3E7A48B19596)))' -f $ServerName
+
+                        $Results = $LDAPSearch.FindAll()
+                        if ($Results.Count -gt 0) {
+                            $Results | ForEach-Object {
+                                Write-Host ('Removing object {0}' -f $_.Path)
+                                Try {
+                                   ([ADSI]($_.Path)).DeleteTree()
+                                   Write-Host ('Successfully cleared AutodiscoverServiceConnectionPoint for {0}' -f $ServerName)
+                                }
+                                Catch {
+                                    Write-Error ('Problem clearing AutodiscoverServiceConnectionPoint for {0}: {1}' -f $ServerName, $Error[0].ExceptionMessage)
+                                }
+                            }
+                            return $true
+                        }
+                        Else {
+                            Write-Host ('AutodiscoverServiceConnectionPoint not found for {0}, waiting a bit ..' -f $ServerName)
+                            Start-Sleep -Seconds 10
+                        }
+                    }
+                } while ($true)
+            }
+
+            if (-not $Global:BackgroundJobs) {
+                $Global:BackgroundJobs = @()
+            }
+            $Job = Start-Job -ScriptBlock $ScriptBlock -ArgumentList $Name, $ConfigNC -Name ('Clear-AutodiscoverSCP-{0}' -f $Name)
+            $Global:BackgroundJobs += $Job
+            Write-MyVerbose ('Started background job to clear AutodiscoverServiceConnectionPoint for {0} (Job ID: {1})' -f $Name, $Job.Id)
+            return $Job
+        }
+        else {
+            $LDAPSearch= New-Object System.DirectoryServices.DirectorySearcher
+            $LDAPSearch.SearchRoot= 'LDAP://{0}' -f $ConfigNC
+            $LDAPSearch.Filter= '(&(cn={0})(objectClass=serviceConnectionPoint)(serviceClassName=ms-Exchange-AutoDiscover-Service)(|(keywords=67661d7F-8FC4-4fa7-BFAC-E1D7794C1F68)(keywords=77378F46-2C66-4aa9-A6A6-3E7A48B19596)))' -f $Name
+            $LDAPSearch.FindAll() | ForEach-Object {
+
+                Write-MyVerbose ('Removing object {0}' -f $_.Path)
+                Try {
+                    ([ADSI]($_.Path)).DeleteTree()
+                }
+                Catch {
+                    Write-MyError ('Problem clearing serviceBindingInformation property on {0}: {1}' -f $_.Path, $Error[0].ExceptionMessage)
+                }
+            }
         }
     }
 
-   Function Set-AutodiscoverServiceConnectionPoint( [string]$Name, [string]$ServiceBinding) {
-        $CNC= Get-ForestConfigurationNC
-        $LDAPSearch= New-Object System.DirectoryServices.DirectorySearcher
-        $LDAPSearch.SearchRoot= "LDAP://$CNC"
-        $LDAPSearch.Filter= "(&(cn=$Name)(objectClass=serviceConnectionPoint)(serviceClassName=ms-Exchange-AutoDiscover-Service)(|(keywords=67661d7F-8FC4-4fa7-BFAC-E1D7794C1F68)(keywords=77378F46-2C66-4aa9-A6A6-3E7A48B19596)))"
-        $LDAPSearch.FindAll() | ForEach-Object {
-            Write-MyVerbose "Setting serviceBindingInformation on $($_.Path) to $ServiceBinding"
-            Try {
-                $SCPObj= $_.GetDirectoryEntry()
-                $null = $SCPObj.Put( 'serviceBindingInformation', $ServiceBinding)
-                $SCPObj.SetInfo()
+   Function Set-AutodiscoverServiceConnectionPoint( [string]$Name, [string]$ServiceBinding, [switch]$Wait) {
+        $ConfigNC = Get-ForestConfigurationNC
+        if ($Wait) {
+            $ScriptBlock = {
+                param($ServerName, $ConfigNC, $serviceBindingValue)
+                do {
+                    if ($null -ne $ConfigNC) {
+                        $LDAPSearch = New-Object System.DirectoryServices.DirectorySearcher
+                        $LDAPSearch.SearchRoot = 'LDAP://{0}' -f $ConfigNC
+                        $LDAPSearch.Filter = '(&(cn={0})(objectClass=serviceConnectionPoint)(serviceClassName=ms-Exchange-AutoDiscover-Service)(|(keywords=67661d7F-8FC4-4fa7-BFAC-E1D7794C1F68)(keywords=77378F46-2C66-4aa9-A6A6-3E7A48B19596)))' -f $ServerName
+
+                        $Results = $LDAPSearch.FindAll()
+                        if ($Results.Count -gt 0) {
+                            $Results | ForEach-Object {
+                                Write-Host ('Setting serviceBindingInformation on {0} to {1}' -f $_.Path, $ServiceBindingValue)
+                                Try {
+                                    $SCPObj = $_.GetDirectoryEntry()
+                                    $null = $SCPObj.Put('serviceBindingInformation', $ServiceBindingValue)
+                                    $SCPObj.SetInfo()
+                                    Write-Host ('Successfully set AutodiscoverServiceConnectionPoint for {0}' -f $ServerName)
+                                }
+                                Catch {
+                                    Write-Error ('Problem setting AutodiscoverServiceConnectionPoint for {0}: {1}' -f $ServerName, $Error[0].ExceptionMessage)
+                                }
+                            }
+                            return $true
+                        }
+                        Else {
+                            Write-Verbose ('AutodiscoverServiceConnectionPoint not found for {0}, waiting a bit ..' -f $ServerName)
+                            Start-Sleep -Seconds 10
+                        }
+                    }
+                } while ($true)
             }
-            Catch {
-                Write-MyError "Problem setting serviceBindingInformation property: $($Error[0])"
+
+            if (-not $Global:BackgroundJobs) {
+                $Global:BackgroundJobs = @()
+            }
+            $Job = Start-Job -ScriptBlock $ScriptBlock -ArgumentList $Name, $ConfigNC, $ServiceBinding -Name ('Set-AutodiscoverSCP-{0}' -f $Name)
+            $Global:BackgroundJobs += $Job
+            Write-MyVerbose ('Started background job to clear AutodiscoverServiceConnectionPoint for {0} (Job ID: {1})' -f $Name, $Job.Id)
+            return $Job
+        }
+        else {
+            $LDAPSearch= New-Object System.DirectoryServices.DirectorySearcher
+            $LDAPSearch.SearchRoot= 'LDAP://{0}' -f $ConfigNC
+            $LDAPSearch.Filter= '(&(cn={0})(objectClass=serviceConnectionPoint)(serviceClassName=ms-Exchange-AutoDiscover-Service)(|(keywords=67661d7F-8FC4-4fa7-BFAC-E1D7794C1F68)(keywords=77378F46-2C66-4aa9-A6A6-3E7A48B19596)))' -f $Name
+            $LDAPSearch.FindAll() | ForEach-Object {
+                Write-MyVerbose ('Setting serviceBindingInformation on {0} to {1}' -f $_.Path, $ServiceBinding)
+                Try {
+                    $SCPObj= $_.GetDirectoryEntry()
+                    $null = $SCPObj.Put( 'serviceBindingInformation', $ServiceBinding)
+                    $SCPObj.SetInfo()
+                }
+                Catch {
+                    Write-MyError ('Problem setting serviceBindingInformation property on {0}: {1}' -f $_.Path, $Error[0].ExceptionMessage)
+                }
             }
         }
     }
@@ -1864,6 +1952,7 @@ process {
 
     Function Cleanup {
         Write-MyOutput "Cleaning up .."
+
         If( Get-WindowsFeature Bits) {
             Write-MyOutput "Removing BITS feature"
             Remove-WindowsFeature Bits
@@ -2272,6 +2361,22 @@ process {
         return $presence
     }
 
+    Function Stop-BackgroundJobs {
+        if ($Global:BackgroundJobs -and $Global:BackgroundJobs.Count -gt 0) {
+            Write-MyVerbose "Cleaning up $($Global:BackgroundJobs.Count) background job(s)..."
+            foreach ($Job in $Global:BackgroundJobs) {
+                if ($Job.State -eq 'Running') {
+                    Stop-Job -Job $Job -ErrorAction SilentlyContinue
+                }
+                $JobOutput= Receive-Job -Job $Job
+                Write-MyVerbose ('Cleanup background job: {0} (ID {1}), Output {2}' -f $Job.Name, $Job.Id, $JobOutput)
+                Remove-Job -Job $Job -Force -ErrorAction SilentlyContinue
+            }
+            $Global:BackgroundJobs = @()
+            Write-MyVerbose "Background job cleanup completed."
+        }
+    }
+
     ########################################
     # MAIN
     ########################################
@@ -2288,6 +2393,17 @@ process {
     $State=@{}
     $StateFile= "$InstallPath\$($env:computerName)_$($ScriptName)_state.xml"
     $State= Restore-State
+
+    $BackgroundJobs= @()
+
+    Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
+        Stop-BackgroundJobs
+    } | Out-Null
+    trap {
+        Write-MyWarning 'Script termination detected, cleaning up background jobs...'
+        Stop-BackgroundJobs
+        break
+    }
 
     Write-Output "Script $ScriptFullName v$ScriptVersion called using $ParameterString"
     Write-Verbose "Using parameterSet $($PsCmdlet.ParameterSetName)"
@@ -2413,7 +2529,7 @@ process {
         If( $State["AutoPilot"]) {
             Write-MyWarning "Reboot pending, will reboot system and rerun phase"
         }
-            Write-MyError "Reboot pending, please reboot system and restart script (parameters will be saved)"
+        Else {
             Write-MyError "Reboot pending, please reboot system and restart script (parameters will be saved)"
         }
     }
@@ -2535,20 +2651,24 @@ process {
 
         4 {
             Write-MyOutput "Installing Exchange"
-            Install-Exchange15_
+
             switch( $State["SCP"]) {
                 '' {
                         # Do nothing
                 }
                 '-' {
-                    Write-MyOutput 'Removing Service Connection Point record'
-                    Clear-AutodiscoverServiceConnectionPoint $ENV:COMPUTERNAME
+                    Clear-AutodiscoverServiceConnectionPoint $ENV:COMPUTERNAME -Wait
                 }
                 default {
-                    Write-MyOutput "Configuring Service Connection Point record as $($State['SCP'])"
-                    Set-AutodiscoverServiceConnectionPoint $ENV:COMPUTERNAME $State['SCP']
+                    Set-AutodiscoverServiceConnectionPoint $ENV:COMPUTERNAME $State['SCP'] -Wait
                 }
             }
+
+            Install-Exchange15_
+
+            # Cleanup any background jobs
+            Stop-BackgroundJobs
+
             If( Get-Service MSExchangeTransport -ErrorAction SilentlyContinue) {
                 Write-MyOutput "Configuring MSExchangeTransport startup to Manual"
                 Set-Service MSExchangeTransport -StartupType Manual
@@ -2690,6 +2810,7 @@ process {
         Start-Sleep -Seconds $COUNTDOWN_TIMER
         Restart-Computer -Force
     }
+
     Exit $ERR_OK
 
 } #Process
