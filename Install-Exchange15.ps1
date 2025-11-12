@@ -8,9 +8,9 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 4.20, September 15th, 2025
+    Version 4.21, November 12, 2025
 
-    Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West,
+    Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West,`
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback
     or contributed in other ways.
 
@@ -325,6 +325,7 @@
     4.13    Fixed race issue when installing from ISO and restarting installation
             Tested with SW_DVD9_Exchange_Server_Subscription_64bit_MultiLang_Std_Ent_.iso_MLF_X24-08113.iso
     4.20    Clearing/setting SCP now background job during install to configure it asynchronous & ASAP
+    4.21    Added disabling MSExchangeAutodiscoverAppPool during setup to prevent responding to requests during setup and postconfig
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -1091,7 +1092,7 @@ process {
             }
             $Job = Start-Job -ScriptBlock $ScriptBlock -ArgumentList $Name, $ConfigNC -Name ('Clear-AutodiscoverSCP-{0}' -f $Name)
             $Global:BackgroundJobs += $Job
-            Write-MyVerbose ('Started background job to clear AutodiscoverServiceConnectionPoint for {0} (Job ID: {1})' -f $Name, $Job.Id)
+            Write-MyOutput ('Started background job to clear AutodiscoverServiceConnectionPoint for {0} (Job ID: {1})' -f $Name, $Job.Id)
             return $Job
         }
         else {
@@ -1264,7 +1265,7 @@ process {
         }
         Else {
             If( $State['Upgrade']) {
-                Write-MyOutput 'Wil run Setup in upgrade mode'
+                Write-MyOutput 'Will run Setup in upgrade mode'
                 $Params= '/mode:Upgrade', $State['IAcceptSwitch']
             }
             Else {
@@ -1276,7 +1277,7 @@ process {
                 {
                     $roles= 'Mailbox'
                 }
-	        $RolesParm= $roles -Join ','
+	            $RolesParm= $roles -Join ','
                 If([string]::IsNullOrEmpty( $RolesParam)) {
                     $RolesParam= 'Mailbox'
                 }
@@ -2361,6 +2362,71 @@ process {
         return $presence
     }
 
+    Function Start-DisableMSExchangeAutodiscoverAppPoolJob {
+
+        $ScriptBlock = {
+            do {
+                If (Get-WebAppPoolState -Name 'MSExchangeAutodiscoverAppPool' -ErrorAction SilentlyContinue) {
+                    
+                    Write-Host 'Stopping and blocking startup of MSExchangeAutodiscoverAppPool'
+                    If( (Get-WebAppPoolState -Name 'MSExchangeAutodiscoverAppPool').Value -ine 'Stopped') {
+                        Try {
+                            Stop-WebAppPool -Name 'MSExchangeAutodiscoverAppPool' -ErrorAction Stop
+                        }
+                        Catch {
+                            Write-Error ('Failed to stop app pool: {0}' -f $Error[0].ExceptionMessage)
+                        }
+                    }
+                    Try {
+                        Set-ItemProperty "IIS:\AppPools\MSExchangeAutodiscoverAppPool" -Name "autoStart" -Value $false -ErrorAction Stop
+                        Set-ItemProperty "IIS:\AppPools\MSExchangeAutodiscoverAppPool" -Name "startMode" -Value "OnDemand" -ErrorAction Stop
+                    } 
+                    Catch {
+                        Write-Error ('Failed to update app pool properties: {0}' -f $Error[0].ExceptionMessage)
+                    }
+                    return $true
+                }
+                Else {
+                    Write-Verbose ('MSExchangeAutodiscoverAppPool not found, waiting a bit ..')
+                    Start-Sleep -Seconds 10
+                }
+            } while ($true)
+        }
+
+        if (-not $Global:BackgroundJobs) {
+            $Global:BackgroundJobs = @()
+        }
+        $Job = Start-Job -ScriptBlock $ScriptBlock -Name ('DisableMSExchangeAutodiscoverAppPoolJob-{0}' -f $env:COMPUTERNAME)
+        $Global:BackgroundJobs += $Job
+
+        Write-MyOutput ('Started background job to disable MSExchangeAutodiscoverAppPool (Job ID: {0})' -f $Job.Id)
+        return $Job
+    }
+    
+    Function Enable-MSExchangeAutodiscoverAppPool {
+        If (Get-WebAppPoolState -Name 'MSExchangeAutodiscoverAppPool' -ErrorAction SilentlyContinue) {
+
+            Write-Host 'Starting and enabling startup of MSExchangeAutodiscoverAppPool'
+            Try {
+                Start-WebAppPool -Name 'MSExchangeAutodiscoverAppPool' -ErrorAction Stop
+            } Catch {
+                Write-MyError ('Failed to start app pool: {0}' -f $Error[0].ExceptionMessage)
+            }
+            Try {
+                Set-ItemProperty "IIS:\AppPools\MSExchangeAutodiscoverAppPool" -Name "autoStart" -Value $true -ErrorAction Stop
+                Set-ItemProperty "IIS:\AppPools\MSExchangeAutodiscoverAppPool" -Name "startMode" -Value "OnDemand" -ErrorAction Stop
+            } 
+            Catch {
+                Write-MyError ('Failed to update app pool properties: {0}' -f $Error[0].ExceptionMessage)
+            }
+            return $true
+        }
+        Else {
+            Write-MyVerbose ('MSExchangeAutodiscoverAppPool not found')
+            return $false
+        }
+    }
+
     Function Stop-BackgroundJobs {
         if ($Global:BackgroundJobs -and $Global:BackgroundJobs.Count -gt 0) {
             Write-MyVerbose "Cleaning up $($Global:BackgroundJobs.Count) background job(s)..."
@@ -2664,6 +2730,8 @@ process {
                 }
             }
 
+            Start-DisableMSExchangeAutodiscoverAppPoolJob
+
             Install-Exchange15_
 
             # Cleanup any background jobs
@@ -2749,6 +2817,8 @@ process {
                 Write-MyOutput "Configuring MSExchangeFrontEndTransport startup to Automatic"
                 Set-Service MSExchangeFrontEndTransport -StartupType Automatic
             }
+
+            Enable-MSExchangeAutodiscoverAppPool
 
             Write-MyVerbose 'Restoring Server Manager startup configuration'
             If( $State['DoNotOpenServerManagerAtLogon']) {
