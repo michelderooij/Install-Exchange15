@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 4.22, December 30, 2025
+    Version 4.23, April 21, 2026
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West,`
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback
@@ -327,6 +327,8 @@
     4.20    Clearing/setting SCP now background job during install to configure it asynchronous & ASAP
     4.21    Added disabling MSExchangeAutodiscoverAppPool during setup to prevent responding to requests during setup and postconfig
     4.22    Corrected download VC++2013 runtime URL due to shortcut being unavailabe
+    4.23    Fixed Edge installation (no need checking for Ex2013 in AD)
+
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -1007,7 +1009,12 @@ process {
         return ([ADSI]'LDAP://RootDSE').rootDomainNamingContext.toString()
     }
     function Get-RootNC {
-        return ([ADSI]'').distinguishedName.toString()
+        Try {
+            return ([ADSI]'').distinguishedName.toString()
+        }
+        Else {
+            return $null
+        }
     }
 
     function Get-ForestConfigurationNC {
@@ -1362,7 +1369,7 @@ process {
         Write-MyOutput 'Configuring Windows Features'
 
         if ( $State['InstallEdge']) {
-            $Feats = 'ADLDS'
+            $Feats [array]'ADLDS'
         }
         else {
             if ( [System.Version]$WS2019_PREFULL -ge [System.Version]$MajorOSVersion) {
@@ -1761,7 +1768,7 @@ process {
             exit $ERR_UNSUPPORTEDEX
         }
 
-        if ( [System.Version]$SetupVersion -ge $EX2019SETUPEXE_CU15) {
+        if ( !($State['InstallEdge']) -and [System.Version]$SetupVersion -ge $EX2019SETUPEXE_CU15) {
             $Ex2013Exists = Get-ExchangeServerObjects | Where-Object { $_.serialNumber[0] -like 'Version 15.0*' }
             if ( $Ex2013Exists) {
                 Write-MyError ('Exchange 2013 detected: {0}. Exchange 2019 CU15 or later cannot co-exist with Exchange 2013' -f ($Ex2013Exists | Select-Object Name) -join ',')
