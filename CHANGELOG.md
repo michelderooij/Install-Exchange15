@@ -2,6 +2,15 @@
 
 All notable changes to Install-Exchange15 are documented here.
 
+## [4.30]
+- Added `-DisableTLS10` switch to disable TLS 1.0 via SCHANNEL registry settings
+- Added `-DisableTLS11` switch to disable TLS 1.1 via SCHANNEL registry settings
+- Added `-DisableInsecureRenegotiation` switch to set `AllowInsecureRenegoClients` and `AllowInsecureRenegoServers` to 0
+- Added `-DisableWeakCiphers` switch to disable NULL, DES 56/56, RC4 variants, and Triple DES 168 SCHANNEL ciphers
+- Added `-DisableWeakHashAlgorithms` switch to disable MD5 and SHA-1 SCHANNEL hash algorithms
+- Added `-DisableNonForwardSecretKeyExchange` switch to disable PKCS/static RSA key exchange
+- Added `-DisableCredentialGuard` switch to disable Credential Guard via `LsaCfgFlags` and `EnableVirtualizationBasedSecurity`
+
 ## [4.26]
 - Corrected documentation: Windows Server 2022 and Windows Server 2025 support both Desktop Experience and Server Core installations, not just Windows Server 2019
 - Improved credential security: the AutoPilot password is no longer decrypted to plain text in memory longer than necessary during credential validation

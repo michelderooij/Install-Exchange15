@@ -9,7 +9,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 4.24, May 7, 2026
+    Version 4.30, May 7, 2026
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West,`
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback
@@ -117,6 +117,27 @@
 
     .PARAMETER EnableAMSI (optional)
     Configure AMSI body scanning for ECP, EWS, OWA and PowerShell (adjust as necessary in-code)
+
+    .PARAMETER DisableTLS10 (optional)
+    Disables TLS 1.0 after setup.
+
+    .PARAMETER DisableTLS11 (optional)
+    Disables TLS 1.1 after setup.
+
+    .PARAMETER DisableInsecureRenegotiation (optional)
+    Disables insecure TLS renegotiation (sets AllowInsecureRenegoClients and AllowInsecureRenegoServers to 0) after setup.
+
+    .PARAMETER DisableWeakCiphers (optional)
+    Disables weak SCHANNEL ciphers (NULL, DES 56/56, RC4 variants, Triple DES 168) after setup.
+
+    .PARAMETER DisableWeakHashAlgorithms (optional)
+    Disables weak SCHANNEL hash algorithms (MD5, SHA-1) after setup.
+
+    .PARAMETER DisableNonForwardSecretKeyExchange (optional)
+    Disables non-forward-secret key exchange (PKCS/static RSA) after setup.
+
+    .PARAMETER DisableCredentialGuard (optional)
+    Disables Credential Guard by setting LsaCfgFlags and EnableVirtualizationBasedSecurity to 0 after setup.
 
     .PARAMETER EnableTLS12 (optional)
     Enable or disable TLS12
@@ -254,6 +275,41 @@ param(
     [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'E')]
     [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'NoSetup')]
     [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'Recover')]
+    [Switch]$DisableTLS10,
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'M')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'E')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'NoSetup')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'Recover')]
+    [Switch]$DisableTLS11,
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'M')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'E')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'NoSetup')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'Recover')]
+    [Switch]$DisableInsecureRenegotiation,
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'M')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'E')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'NoSetup')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'Recover')]
+    [Switch]$DisableWeakCiphers,
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'M')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'E')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'NoSetup')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'Recover')]
+    [Switch]$DisableWeakHashAlgorithms,
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'M')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'E')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'NoSetup')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'Recover')]
+    [Switch]$DisableNonForwardSecretKeyExchange,
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'M')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'E')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'NoSetup')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'Recover')]
+    [Switch]$DisableCredentialGuard,
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'M')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'E')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'NoSetup')]
+    [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'Recover')]
     [Switch]$EnableTLS12,
     [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'M')]
     [parameter( Mandatory = $false, ValueFromPipelineByPropertyName = $false, ParameterSetName = 'E')]
@@ -289,7 +345,7 @@ param(
 
 process {
 
-    $ScriptVersion = '4.26'
+    $ScriptVersion = '4.30'
 
     $ERR_OK = 0
     $ERR_PROBLEMADPREPARE = 1001
@@ -1907,6 +1963,90 @@ process {
 
     }
 
+    function Disable-CredentialGuard {
+        Write-MyVerbose 'Disabling Credential Guard'
+        $LsaKey = 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa'
+        if ( -not (Test-Path $LsaKey -ErrorAction SilentlyContinue)) {
+            New-Item -Path (Split-Path $LsaKey -Parent) -Name (Split-Path $LsaKey -Leaf) -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+        New-ItemProperty -Path $LsaKey -Name 'LsaCfgFlags' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue | Out-Null
+
+        $DeviceGuardKey = 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard'
+        if ( -not (Test-Path $DeviceGuardKey -ErrorAction SilentlyContinue)) {
+            New-Item -Path (Split-Path $DeviceGuardKey -Parent) -Name (Split-Path $DeviceGuardKey -Leaf) -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+        New-ItemProperty -Path $DeviceGuardKey -Name 'EnableVirtualizationBasedSecurity' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue | Out-Null
+    }
+
+    function Disable-TLS10 {
+        Write-MyVerbose 'Disabling TLS 1.0'
+        New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols" -Name "TLS 1.0" -ErrorAction SilentlyContinue
+        New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0" -Name "Client" -ErrorAction SilentlyContinue
+        New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0" -Name "Server" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client" -Name "DisabledByDefault" -Value 1 -Type DWord
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client" -Name "Enabled" -Value 0 -Type DWord
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server" -Name "DisabledByDefault" -Value 1 -Type DWord
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server" -Name "Enabled" -Value 0 -Type DWord
+    }
+
+    function Disable-TLS11 {
+        Write-MyVerbose 'Disabling TLS 1.1'
+        New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols" -Name "TLS 1.1" -ErrorAction SilentlyContinue
+        New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1" -Name "Client" -ErrorAction SilentlyContinue
+        New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1" -Name "Server" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Client" -Name "DisabledByDefault" -Value 1 -Type DWord
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Client" -Name "Enabled" -Value 0 -Type DWord
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Server" -Name "DisabledByDefault" -Value 1 -Type DWord
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Server" -Name "Enabled" -Value 0 -Type DWord
+    }
+
+    function Disable-InsecureRenegotiation {
+        Write-MyVerbose 'Disabling insecure TLS renegotiation'
+        $SchannelKey = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL'
+        New-ItemProperty -Path $SchannelKey -Name 'AllowInsecureRenegoClients' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue | Out-Null
+        New-ItemProperty -Path $SchannelKey -Name 'AllowInsecureRenegoServers' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue | Out-Null
+    }
+
+    function Disable-WeakCiphers {
+        # Note: Can't use regular New-Item as registry path contains '/' (always interpreted as path splitter)
+        Write-MyVerbose 'Disabling weak SCHANNEL ciphers'
+        $CipherKeys = @('NULL', 'DES 56/56', 'RC4 40/128', 'RC4 56/128', 'RC4 64/128', 'RC4 128/128', 'Triple DES 168')
+        $RegKey = 'SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Ciphers'
+        $RegName = 'Enabled'
+        foreach ( $CipherKey in $CipherKeys) {
+            $RegHandle = (Get-Item 'HKLM:\').OpenSubKey( $RegKey, $true)
+            $RegHandle.CreateSubKey( $CipherKey) | Out-Null
+            $RegHandle.Close()
+            Write-MyVerbose "Disabling cipher $CipherKey"
+            New-ItemProperty -Path (Join-Path (Join-Path 'HKLM:\' $RegKey) $CipherKey) -Name $RegName -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
+
+    function Disable-WeakHashAlgorithms {
+        Write-MyVerbose 'Disabling weak SCHANNEL hash algorithms'
+        $HashKeys = @('MD5', 'SHA')
+        $RegBase = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Hashes'
+        $RegName = 'Enabled'
+        foreach ( $HashKey in $HashKeys) {
+            $RegPath = Join-Path $RegBase $HashKey
+            if ( -not (Test-Path $RegPath -ErrorAction SilentlyContinue)) {
+                New-Item -Path $RegBase -Name $HashKey -Force -ErrorAction SilentlyContinue | Out-Null
+            }
+            Write-MyVerbose "Disabling hash algorithm $HashKey"
+            New-ItemProperty -Path $RegPath -Name $RegName -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
+
+    function Disable-NonForwardSecretKeyExchange {
+        Write-MyVerbose 'Disabling non-forward-secret key exchange (PKCS/static RSA)'
+        $RegBase = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\KeyExchangeAlgorithms'
+        $RegPath = Join-Path $RegBase 'PKCS'
+        if ( -not (Test-Path $RegPath -ErrorAction SilentlyContinue)) {
+            New-Item -Path $RegBase -Name 'PKCS' -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+        New-ItemProperty -Path $RegPath -Name 'Enabled' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue | Out-Null
+    }
+
     function Enable-WindowsDefenderExclusions {
 
         if ( Get-Command -Name Add-MpPreference -ErrorAction SilentlyContinue) {
@@ -2225,6 +2365,13 @@ process {
         $State["EnableTLS12"] = $EnableTLS12
         $State["EnableTLS13"] = $EnableTLS13
         $State["EnableAMSI"] = $EnableAMSI
+        $State["DisableTLS10"] = $DisableTLS10
+        $State["DisableTLS11"] = $DisableTLS11
+        $State["DisableInsecureRenegotiation"] = $DisableInsecureRenegotiation
+        $State["DisableWeakCiphers"] = $DisableWeakCiphers
+        $State["DisableWeakHashAlgorithms"] = $DisableWeakHashAlgorithms
+        $State["DisableNonForwardSecretKeyExchange"] = $DisableNonForwardSecretKeyExchange
+        $State["DisableCredentialGuard"] = $DisableCredentialGuard
         $State["DoNotEnableEP"] = $DoNotEnableEP
         $State["DoNotEnableEP_FEEWS"] = $DoNotEnableEP_FEEWS
         $State["SkipRolesCheck"] = $SkipRolesCheck
@@ -2458,8 +2605,30 @@ process {
                 if ( $State["DisableRC4"]) {
                     Disable-RC4
                 }
-
+                
                 Set-TLSSettings -TLS12 $State["EnableTLS12"] -TLS13 $State["EnableTLS13"]
+
+                if ( $State["DisableTLS10"]) {
+                    Disable-TLS10
+                }
+                if ( $State["DisableTLS11"]) {
+                    Disable-TLS11
+                }
+                if ( $State["DisableInsecureRenegotiation"]) {
+                    Disable-InsecureRenegotiation
+                }
+                if ( $State["DisableWeakCiphers"]) {
+                    Disable-WeakCiphers
+                }
+                if ( $State["DisableWeakHashAlgorithms"]) {
+                    Disable-WeakHashAlgorithms
+                }
+                if ( $State["DisableNonForwardSecretKeyExchange"]) {
+                    Disable-NonForwardSecretKeyExchange
+                }
+                if ( $State["DisableCredentialGuard"]) {
+                    Disable-CredentialGuard
+                }
 
                 Import-ExchangeModule
 

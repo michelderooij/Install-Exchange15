@@ -48,6 +48,13 @@ Point `-InstallPath` at a central UNC share to share prerequisites and downloads
 | `-EnableTLS12` | Configure TLS 1.2 |
 | `-EnableTLS13` | Configure TLS 1.3 (WS2022/WS2025 with Exchange 2019 CU15+) |
 | `-EnableAMSI` | Enable AMSI body scanning for ECP, EWS, OWA, and PowerShell virtual directories |
+| `-DisableTLS10` | Disable TLS 1.0 |
+| `-DisableTLS11` | Disable TLS 1.1 |
+| `-DisableInsecureRenegotiation` | Disallow insecure TLS renegotiation (`AllowInsecureRenegoClients` and `AllowInsecureRenegoServers` set to 0) |
+| `-DisableWeakCiphers` | Disable weak SCHANNEL ciphers: NULL, DES 56/56, RC4 40/128, RC4 56/128, RC4 64/128, RC4 128/128, Triple DES 168 |
+| `-DisableWeakHashAlgorithms` | Disable weak SCHANNEL hash algorithms: MD5 and SHA-1 |
+| `-DisableNonForwardSecretKeyExchange` | Disable non-forward-secret key exchange (PKCS/static RSA) |
+| `-DisableCredentialGuard` | Disable Credential Guard (`LsaCfgFlags` and `EnableVirtualizationBasedSecurity` set to 0) |
 | `-NoSetup` | Install prerequisites only; skip Exchange setup |
 | `-Recover` | Run in RecoverServer mode |
 | `-NoNet481` | Use .NET 4.8 instead of 4.8.1 |
@@ -62,16 +69,27 @@ Point `-InstallPath` at a central UNC share to share prerequisites and downloads
 $Cred = Get-Credential
 
 $Params = @{
-    Organization = 'Fabrikam'
-    SourcePath   = '\\server\share\ExchangeServer2019-x64-CU15'
-    InstallPath  = 'C:\Install'
-    Credentials  = $Cred
-    MDBName      = 'MDB1'
-    MDBDBPath    = 'C:\MailboxData\MDB1\DB'
-    MDBLogPath   = 'C:\MailboxData\MDB1\Log'
-    SCP          = 'https://autodiscover.fabrikam.com/autodiscover/autodiscover.xml'
-    AutoPilot    = $true
-    Verbose      = $true
+    Organization                   = 'Fabrikam'
+    SourcePath                     = '\\server\share\ExchangeServer2019-x64-CU15'
+    InstallPath                    = 'C:\Install'
+    Credentials                    = $Cred
+    MDBName                        = 'MDB1'
+    MDBDBPath                      = 'C:\MailboxData\MDB1\DB'
+    MDBLogPath                     = 'C:\MailboxData\MDB1\Log'
+    SCP                            = 'https://autodiscover.fabrikam.com/autodiscover/autodiscover.xml'
+    AutoPilot                      = $true
+    DisableSSL3                    = $true
+    DisableRC4                     = $true
+    DisableTLS10                   = $true
+    DisableTLS11                   = $true
+    DisableInsecureRenegotiation   = $true
+    DisableWeakCiphers             = $true
+    DisableWeakHashAlgorithms      = $true
+    DisableNonForwardSecretKeyExchange = $true
+    EnableTLS12                    = $true
+    EnableECC                      = $true
+    EnableAMSI                     = $true
+    Verbose                        = $true
 }
 
 .\Install-Exchange15.ps1 @Params
@@ -110,7 +128,7 @@ The script runs in six sequential phases. In AutoPilot mode, the system reboots 
 | 2 | Runtime prerequisites | Installs .NET Framework 4.8 or 4.8.1 (based on OS); installs OS-specific hotfixes (e.g. KB3206632 on WS2016); installs the Visual C++ 2012 and 2013 runtimes; installs the IIS URL Rewrite module. Reboots when complete. |
 | 3 | Exchange prerequisites & AD preparation | Installs Unified Communications Managed API 4.0 (UCMA); when you specify `-Organization`, runs Exchange AD preparation (`/PrepareSchema`, `/PrepareAD`, `/PrepareDomain`). For Edge servers: sets the primary DNS suffix. Reboots when complete. |
 | 4 | Exchange setup | Runs `setup.exe` to install Exchange. When you specify `-SCP`, the script pre-configures or clears the Autodiscover Service Connection Point so the server does not receive client traffic until setup completes. Reboots when complete. |
-| 5 | Post-installation configuration | Configures Windows Defender exclusions; sets the high-performance power plan; disables NIC power management; tunes the pagefile and TCP settings; applies the requested TLS configuration (TLS 1.2, TLS 1.3, disable SSL 3.0, disable RC4); enables ECC and/or AMSI when requested; installs additional recommended security updates when you specify `-IncludeFixes`. Reboots when complete. |
+| 5 | Post-installation configuration | Configures Windows Defender exclusions; sets the high-performance power plan; disables NIC power management; tunes the pagefile and TCP settings; applies the requested TLS configuration (TLS 1.2, TLS 1.3, disable SSL 3.0, disable RC4, disable TLS 1.0, disable TLS 1.1); applies optional SCHANNEL hardening (insecure renegotiation, weak ciphers, weak hash algorithms, non-forward-secret key exchange); disables Credential Guard when requested; enables ECC and/or AMSI when requested; installs additional recommended security updates when you specify `-IncludeFixes`. Reboots when complete. |
 | 6 | Finalization | Re-enables Exchange transport services and the Autodiscover app pool; performs IIS health checks for OWA, ECP, EWS, Autodiscover, ActiveSync, OAB, MAPI, and RPC endpoints; re-enables UAC and IE Enhanced Security Configuration; removes auto-logon; locks the workstation when you specify `-Lock`. |
 
 ## Required Permissions
