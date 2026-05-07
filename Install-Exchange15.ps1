@@ -8,7 +8,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 4.23, April 21, 2026
+    Version 4.24, May 7, 2026
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West,`
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback
@@ -328,7 +328,7 @@
     4.21    Added disabling MSExchangeAutodiscoverAppPool during setup to prevent responding to requests during setup and postconfig
     4.22    Corrected download VC++2013 runtime URL due to shortcut being unavailabe
     4.23    Fixed Edge installation (no need checking for Ex2013 in AD)
-
+    4.24    Fixed autodiscover SCP configuration
 
     .PARAMETER Organization
     Specifies name of the Exchange organization to create. When omitted, the step
@@ -1009,10 +1009,10 @@ process {
         return ([ADSI]'LDAP://RootDSE').rootDomainNamingContext.toString()
     }
     function Get-RootNC {
-        Try {
+        try {
             return ([ADSI]'').distinguishedName.toString()
         }
-        Else {
+        else {
             return $null
         }
     }
@@ -1225,7 +1225,7 @@ process {
     }
 
     function Set-EdgeDNSSuffix ([string]$DNSSuffix) {
-        Write-MyVerbose 'Setting Primary DNS Suffix'
+        Write-MyVerbose ('Setting Primary DNS Suffix to {0}' -f $DNSSuffix)
         #https://technet.microsoft.com/library%28EXCHG.150%29/ms.exch.setupreadiness.FqdnMissing.aspx?f=255&MSPPError=-2147217396
         #Update primary DNS Suffix for FQDN
         Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\" -Name Domain -Value $DNSSuffix
@@ -2377,6 +2377,14 @@ process {
     function Start-DisableMSExchangeAutodiscoverAppPoolJob {
 
         $ScriptBlock = {
+            try {
+                Import-Module WebAdministration -ErrorAction Stop
+            }
+            catch {
+                Write-Error "Failed to import WebAdministration module: $_"
+                return $false
+            }
+
             do {
                 if (Get-WebAppPoolState -Name 'MSExchangeAutodiscoverAppPool' -ErrorAction SilentlyContinue) {
 
@@ -2416,6 +2424,14 @@ process {
     }
 
     function Enable-MSExchangeAutodiscoverAppPool {
+        try {
+            Import-Module WebAdministration -ErrorAction Stop
+        }
+        catch {
+            Write-MyError "Failed to import WebAdministration module: $_"
+            return $false
+        }
+
         if (Get-WebAppPoolState -Name 'MSExchangeAutodiscoverAppPool' -ErrorAction SilentlyContinue) {
 
             Write-Host 'Starting and enabling startup of MSExchangeAutodiscoverAppPool'
