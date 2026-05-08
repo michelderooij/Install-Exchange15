@@ -443,7 +443,6 @@ process {
         return $State
     }
 
-
     function Get-SetupTextVersion( $FileVersion) {
         $Versions = @{
             $EX2016SETUPEXE_CU23 = 'Exchange Server 2016 Cumulative Update 23'
@@ -2605,7 +2604,7 @@ process {
                 if ( $State["DisableRC4"]) {
                     Disable-RC4
                 }
-                
+
                 Set-TLSSettings -TLS12 $State["EnableTLS12"] -TLS13 $State["EnableTLS13"]
 
                 if ( $State["DisableTLS10"]) {
