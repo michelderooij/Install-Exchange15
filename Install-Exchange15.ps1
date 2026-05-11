@@ -9,7 +9,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 4.31, May 11, 2026
+    Version 4.30.1, May 11, 2026
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West,`
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback
@@ -345,7 +345,7 @@ param(
 
 process {
 
-    $ScriptVersion = '4.3.1'
+    $ScriptVersion = '4.30.1'
 
     $ERR_OK = 0
     $ERR_PROBLEMADPREPARE = 1001
@@ -2506,13 +2506,6 @@ process {
                 Write-MyOutput "Installing BITS module"
                 Import-Module BITSTransfer
 
-                if (!$State['InstallEdge']) {
-                    if (-not (Get-PSDrive -Name 'IIS' -ErrorAction SilentlyContinue)) {
-                        Write-MyError 'IIS: PSDrive not available. The WebAdministration module may not have loaded correctly after Windows Feature installation in the previous phase. Verify IIS-related Windows Features were installed successfully.'
-                        exit $ERR_PROBLEMADDINGFEATURE
-                    }
-                }
-
                 # Check .NET FrameWork 4.8.1 needs to be installed
                 if ( $State["Install481"]) {
 
@@ -2588,7 +2581,13 @@ process {
                 }
 
                 if (!$State['InstallEdge']) {
-                    Start-DisableMSExchangeAutodiscoverAppPoolJob
+                    if (Get-PSDrive -Name 'IIS' -ErrorAction SilentlyContinue) {
+                        Write-MyOutput "Starting background job to watch for and disable MSExchangeAutodiscoverAppPool"
+                        Start-DisableMSExchangeAutodiscoverAppPoolJob
+                    }
+                    Else {
+                        Write-MyWarning "IIS PSDrive not available, skipping background job to disable MSExchangeAutodiscoverAppPool"
+                    }
                 }
 
                 Install-Exchange15_
@@ -2700,7 +2699,13 @@ process {
                 }
 
                 if (!$State['InstallEdge']) {
-                    Enable-MSExchangeAutodiscoverAppPool
+                    if (Get-PSDrive -Name 'IIS' -ErrorAction SilentlyContinue) {
+                        Write-MyOutput "Enabling MSExchangeAutodiscoverAppPool"
+                        Enable-MSExchangeAutodiscoverAppPool
+                    }
+                    Else {
+                        Write-MyWarning "IIS PSDrive not available, skip (re-)enabling MSExchangeAutodiscoverAppPool"
+                    }
                 }
 
                 Write-MyVerbose 'Restoring Server Manager startup configuration'
