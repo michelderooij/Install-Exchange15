@@ -2,6 +2,12 @@
 
 All notable changes to Install-Exchange15 are documented here.
 
+## [4.31]
+- Added PowerShell 7.x detection: script now fails immediately with a clear error if run under PowerShell 7 or later, as Exchange Server does not support PowerShell 7
+- Added IIS: PSDrive availability check at the start of Phase 2 for Mailbox server installations; logs a descriptive error and exits if the WebAdministration module did not load correctly after the Phase 1 Windows Feature installation and reboot
+- `Start-DisableMSExchangeAutodiscoverAppPoolJob` and `Enable-MSExchangeAutodiscoverAppPool` are now only called for Mailbox server installations; both calls are skipped when installing an Edge Transport server
+- Script version is now written to the log file at the start of each run
+
 ## [4.30]
 - Added `-DisableTLS10` switch to disable TLS 1.0 via SCHANNEL registry settings
 - Added `-DisableTLS11` switch to disable TLS 1.1 via SCHANNEL registry settings

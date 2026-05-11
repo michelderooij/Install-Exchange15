@@ -9,7 +9,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 4.30, May 7, 2026
+    Version 4.31, May 11, 2026
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West,`
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback
@@ -345,7 +345,7 @@ param(
 
 process {
 
-    $ScriptVersion = '4.30'
+    $ScriptVersion = '4.3.1'
 
     $ERR_OK = 0
     $ERR_PROBLEMADPREPARE = 1001
@@ -368,6 +368,7 @@ process {
     $ERR_RUNNINGNONENTERPRISEADMIN = 1019
     $ERR_RUNNINGNONSCHEMAADMIN = 1020
     $ERR_COULDNOTDETERMINEADSITE = 1021
+    $ERR_UNSUPPORTEDPSVERSION = 1022
     $ERR_PROBLEMPACKAGEDL = 1120
     $ERR_PROBLEMPACKAGESETUP = 1121
     $ERR_PROBLEMPACKAGEEXTRACT = 1122
@@ -2299,6 +2300,11 @@ process {
     $MinorOSVersion = [string]($OSVersion.Split('.')[2])
     $FullOSVersion = ('{0}.{1}' -f $MajorOSVersion, $MinorOSVersion)
 
+    if ($PSVersionTable.PSVersion.Major -ge 7) {
+        Write-Error "PowerShell 7.x is not supported. Exchange Server requires Windows PowerShell 5.1. Current version: $($PSVersionTable.PSVersion)"
+        exit $ERR_UNSUPPORTEDPSVERSION
+    }
+
     $State = @{}
     $StateFile = "$InstallPath\$($env:computerName)_$($ScriptName)_state.json"
     $State = Restore-State
@@ -2433,6 +2439,7 @@ process {
     Test-Preflight
 
     Write-MyVerbose "Logging to $($State["TranscriptFile"])"
+    Write-MyOutput ('Install-Exchange15 version {0}' -f $ScriptVersion)
 
     # Get rid of the security dialog when spawning exe's etc.
     Disable-OpenFileSecurityWarning
@@ -2498,6 +2505,13 @@ process {
             2 {
                 Write-MyOutput "Installing BITS module"
                 Import-Module BITSTransfer
+
+                if (!$State['InstallEdge']) {
+                    if (-not (Get-PSDrive -Name 'IIS' -ErrorAction SilentlyContinue)) {
+                        Write-MyError 'IIS: PSDrive not available. The WebAdministration module may not have loaded correctly after Windows Feature installation in the previous phase. Verify IIS-related Windows Features were installed successfully.'
+                        exit $ERR_PROBLEMADDINGFEATURE
+                    }
+                }
 
                 # Check .NET FrameWork 4.8.1 needs to be installed
                 if ( $State["Install481"]) {
@@ -2573,7 +2587,9 @@ process {
                     }
                 }
 
-                Start-DisableMSExchangeAutodiscoverAppPoolJob
+                if (!$State['InstallEdge']) {
+                    Start-DisableMSExchangeAutodiscoverAppPoolJob
+                }
 
                 Install-Exchange15_
 
@@ -2683,7 +2699,9 @@ process {
                     Set-Service MSExchangeFrontEndTransport -StartupType Automatic
                 }
 
-                Enable-MSExchangeAutodiscoverAppPool
+                if (!$State['InstallEdge']) {
+                    Enable-MSExchangeAutodiscoverAppPool
+                }
 
                 Write-MyVerbose 'Restoring Server Manager startup configuration'
                 if ( $State['DoNotOpenServerManagerAtLogon']) {
