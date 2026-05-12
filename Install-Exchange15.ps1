@@ -2224,6 +2224,13 @@ process {
                 Write-Error "Failed to import WebAdministration module: $_"
                 return $false
             }
+            try {
+                Get-PSDrive -Name 'IIS' -ErrorAction Stop
+            }
+            catch {
+                Write-Error "WebAdministration module imported, but IIS PS drive not available: $_"
+                return $false
+            }
 
             do {
                 if (Get-WebAppPoolState -Name 'MSExchangeAutodiscoverAppPool' -ErrorAction SilentlyContinue) {
@@ -2269,6 +2276,13 @@ process {
         }
         catch {
             Write-MyError "Failed to import WebAdministration module: $_"
+            return $false
+        }
+        try {
+            Get-PSDrive -Name 'IIS' -ErrorAction Stop
+        }
+        catch {
+            Write-MyError "WebAdministration module imported, but IIS PS drive not available: $_"
             return $false
         }
 
@@ -2605,6 +2619,7 @@ process {
                 }
 
                 if (!$State['InstallEdge']) {
+                    Import-Module WebAdministration
                     if (Get-PSDrive -Name 'IIS' -ErrorAction SilentlyContinue) {
                         Write-MyOutput "Starting background job to watch for and disable MSExchangeAutodiscoverAppPool"
                         Start-DisableMSExchangeAutodiscoverAppPoolJob
@@ -2723,6 +2738,7 @@ process {
                 }
 
                 if (!$State['InstallEdge']) {
+                    Import-Module WebAdministration
                     if (Get-PSDrive -Name 'IIS' -ErrorAction SilentlyContinue) {
                         Write-MyOutput "Enabling MSExchangeAutodiscoverAppPool"
                         Enable-MSExchangeAutodiscoverAppPool
