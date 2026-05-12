@@ -9,7 +9,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
 
-    Version 4.30.1, May 11, 2026
+    Version 4.30.3, May 12, 2026
 
     Thanks to Maarten Piederiet, Thomas Stensitzki, Brian Reid, Martin Sieber, Sebastiaan Brozius, Bobby West,`
     Pavel Andreev, Rob Whaley, Simon Poirier, Brenle, Eric Vegter and everyone else who provided feedback
@@ -345,7 +345,7 @@ param(
 
 process {
 
-    $ScriptVersion = '4.30.1'
+    $ScriptVersion = '4.30.3'
 
     $ERR_OK = 0
     $ERR_PROBLEMADPREPARE = 1001
@@ -502,7 +502,7 @@ process {
         Write-Output $Text
         $Location = Split-Path $State['TranscriptFile'] -Parent
         if ( Test-Path $Location) {
-            Write-Output "$(Get-Date -Format u): $Text" | Out-File $State['TranscriptFile'] -Append -ErrorAction SilentlyContinue
+            Write-Output "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.ffff')] $Text" | Out-File $State['TranscriptFile'] -Append -ErrorAction SilentlyContinue
         }
     }
 
@@ -510,7 +510,7 @@ process {
         Write-Warning $Text
         $Location = Split-Path $State['TranscriptFile'] -Parent
         if ( Test-Path $Location) {
-            Write-Output "$(Get-Date -Format u): [WARNING] $Text" | Out-File $State['TranscriptFile'] -Append -ErrorAction SilentlyContinue
+            Write-Output "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.ffff')] [WARNING] $Text" | Out-File $State['TranscriptFile'] -Append -ErrorAction SilentlyContinue
         }
     }
 
@@ -518,7 +518,7 @@ process {
         Write-Error $Text
         $Location = Split-Path $State['TranscriptFile'] -Parent
         if ( Test-Path $Location) {
-            Write-Output "$(Get-Date -Format u): [ERROR] $Text" | Out-File $State['TranscriptFile'] -Append -ErrorAction SilentlyContinue
+            Write-Output "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.ffff')] [ERROR] $Text" | Out-File $State['TranscriptFile'] -Append -ErrorAction SilentlyContinue
         }
     }
 
@@ -526,7 +526,15 @@ process {
         Write-Verbose $Text
         $Location = Split-Path $State['TranscriptFile'] -Parent
         if ( Test-Path $Location) {
-            Write-Output "$(Get-Date -Format u): [VERBOSE] $Text" | Out-File $State['TranscriptFile'] -Append -ErrorAction SilentlyContinue
+            Write-Output "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.ffff')] [VERBOSE] $Text" | Out-File $State['TranscriptFile'] -Append -ErrorAction SilentlyContinue
+        }
+    }
+
+    function Write-MyDebug( $Text) {
+        Write-Debug $Text
+        $Location = Split-Path $State['TranscriptFile'] -Parent
+        if ( Test-Path $Location) {
+            Write-Output "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.ffff')] [DEBUG] $Text" | Out-File $State['TranscriptFile'] -Append -ErrorAction SilentlyContinue
         }
     }
 
@@ -882,10 +890,10 @@ process {
                         $Results = $LDAPSearch.FindAll()
                         if ($Results.Count -gt 0) {
                             $Results | ForEach-Object {
-                                Write-Host ('Removing object {0}' -f $_.Path)
+                                Write-Output ('Removing object {0}' -f $_.Path)
                                 try {
                                     ([ADSI]($_.Path)).DeleteTree()
-                                    Write-Host ('Successfully cleared AutodiscoverServiceConnectionPoint for {0}' -f $ServerName)
+                                    Write-Output ('Successfully cleared AutodiscoverServiceConnectionPoint for {0}' -f $ServerName)
                                 }
                                 catch {
                                     Write-Error ('Problem clearing AutodiscoverServiceConnectionPoint for {0}: {1}' -f $ServerName, $Error[0].ExceptionMessage)
@@ -894,7 +902,7 @@ process {
                             return $true
                         }
                         else {
-                            Write-Host ('AutodiscoverServiceConnectionPoint not found for {0}, waiting a bit ..' -f $ServerName)
+                            Write-Output ('[VERBOSE] AutodiscoverServiceConnectionPoint not found for {0}, waiting a bit ..' -f $ServerName)
                             Start-Sleep -Seconds 10
                         }
                     }
@@ -940,12 +948,12 @@ process {
                         $Results = $LDAPSearch.FindAll()
                         if ($Results.Count -gt 0) {
                             $Results | ForEach-Object {
-                                Write-Host ('Setting serviceBindingInformation on {0} to {1}' -f $_.Path, $ServiceBindingValue)
+                                Write-Output ('Setting serviceBindingInformation on {0} to {1}' -f $_.Path, $ServiceBindingValue)
                                 try {
                                     $SCPObj = $_.GetDirectoryEntry()
                                     $null = $SCPObj.Put('serviceBindingInformation', $ServiceBindingValue)
                                     $SCPObj.SetInfo()
-                                    Write-Host ('Successfully set AutodiscoverServiceConnectionPoint for {0}' -f $ServerName)
+                                    Write-Output ('Successfully set AutodiscoverServiceConnectionPoint for {0}' -f $ServerName)
                                 }
                                 catch {
                                     Write-Error ('Problem setting AutodiscoverServiceConnectionPoint for {0}: {1}' -f $ServerName, $Error[0].ExceptionMessage)
@@ -954,7 +962,7 @@ process {
                             return $true
                         }
                         else {
-                            Write-Verbose ('AutodiscoverServiceConnectionPoint not found for {0}, waiting a bit ..' -f $ServerName)
+                            Write-Output ('[VERBOSE] AutodiscoverServiceConnectionPoint not found for {0}, waiting a bit ..' -f $ServerName)
                             Start-Sleep -Seconds 10
                         }
                     }
@@ -1608,6 +1616,14 @@ process {
                 exit $ERR_NOTDOMAINJOINED
             }
         }
+        else {
+            if ( ($State["InstallPhase"] -eq 1)) {
+                if ( Test-Path $EXCHANGEINSTALLKEY) {
+                    Write-MyOutput 'Exchange installation found - switching to Upgrade mode'
+                    $State['Upgrade'] = $true
+                }
+            }
+        }
         Write-MyOutput 'Checking NIC configuration ..'
         if (! (Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration -Filter 'IPEnabled=True AND DHCPEnabled=False')) {
             $AzureHosted = Get-Service | Where-Object { $_.Name -ieq 'Windows Azure Guest Agent' -or $_.Name -ieq 'Windows Azure Network Agent' -or $_.Name -ieq 'Windows Azure Telemetry Service' }
@@ -1905,19 +1921,27 @@ process {
         # https://learn.microsoft.com/en-us/exchange/antispam-and-antimalware/amsi-integration-with-exchange?view=exchserver-2019#enable-exchange-server-amsi-body-scanning
         Write-MyVerbose 'Enabling AMSI body scanning for OWA, ECP, EWS and PowerShell'
 
-        New-SettingOverride -Name "EnableAMSIBodyScan" -Component Cafe -Section AmsiRequestBodyScanning -Parameters $ConfigParam -Reason "Enabling AMSI body Scan"
-        Get-ExchangeDiagnosticInfo -Process Microsoft.Exchange.Directory.TopologyService -Component VariantConfiguration -Argument Refresh
-        Restart-Service -Name W3SVC, WAS -Force
+        $Override = Get-SettingOverride | Where-Object { $_.Name -eq "EnableAMSIBodyScan" }
+        if ( $Override) {
+            Write-MyVerbose ('Configuration for AMSI body scanning already configured')
+        }
+        else {
+            New-SettingOverride -Name "EnableAMSIBodyScan" -Component Cafe -Section AmsiRequestBodyScanning -Parameters $ConfigParam -Reason "Enabling AMSI body Scan" -Force
+            Get-ExchangeDiagnosticInfo -Process Microsoft.Exchange.Directory.TopologyService -Component VariantConfiguration -Argument Refresh
+            Restart-Service -Name W3SVC, WAS -Force
+        }
     }
 
     function Set-TLSSettings {
 
         param(
-            [switch]$TLS12,
-            [switch]$TLS13
+            [switch]$EnableTLS12,
+            [switch]$EnableTLS13,
+            [switch]$DisableTLS10,
+            [switch]$DisableTLS11
         )
 
-        if ( $TLS12) {
+        if ( $EnableTLS12) {
 
             # configure the .NET Framework 4.x Schannel inheritance
             Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\.NETFramework\v4.0.30319" -Name "SystemDefaultTlsVersions" -Value 1 -Type DWord
@@ -1946,7 +1970,7 @@ process {
         }
 
         if ( [System.Version]$FullOSVersion -ge [System.Version]$WS2022_PREFULL -and [System.Version]$SetupVersion -ge [System.Version]$EX2019SETUPEXE_CU15) {
-            if ( $TLS13) {
+            if ( $EnableTLS13) {
 
                 # configure the .NET Framework 4.x Schannel inheritance
                 Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\.NETFramework\v4.0.30319" -Name "SystemDefaultTlsVersions" -Value 1 -Type DWord
@@ -1985,6 +2009,48 @@ process {
             Write-MyWarning 'TLS13 configuration not supported for this OS or Exchange version'
         }
 
+        if ( $DisableTLS10) {
+            Write-MyVerbose 'Disabling TLS 1.0'
+            New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols" -Name "TLS 1.0" -ErrorAction SilentlyContinue
+            New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0" -Name "Client" -ErrorAction SilentlyContinue
+            New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0" -Name "Server" -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client" -Name "DisabledByDefault" -Value 1 -Type DWord
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client" -Name "Enabled" -Value 0 -Type DWord
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server" -Name "DisabledByDefault" -Value 1 -Type DWord
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server" -Name "Enabled" -Value 0 -Type DWord
+        }
+        else {
+            Write-MyVerbose 'Enabling TLS 1.0'
+            New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols" -Name "TLS 1.0" -ErrorAction SilentlyContinue
+            New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0" -Name "Client" -ErrorAction SilentlyContinue
+            New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0" -Name "Server" -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client" -Name "DisabledByDefault" -Value 0 -Type DWord
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client" -Name "Enabled" -Value 1 -Type DWord
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server" -Name "DisabledByDefault" -Value 0 -Type DWord
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server" -Name "Enabled" -Value 1 -Type DWord
+        }
+
+        if ( $DisableTLS11) {
+            Write-MyVerbose 'Disabling TLS 1.1'
+            New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols" -Name "TLS 1.1" -ErrorAction SilentlyContinue
+            New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1" -Name "Client" -ErrorAction SilentlyContinue
+            New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1" -Name "Server" -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Client" -Name "DisabledByDefault" -Value 1 -Type DWord
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Client" -Name "Enabled" -Value 0 -Type DWord
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Server" -Name "DisabledByDefault" -Value 1 -Type DWord
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Server" -Name "Enabled" -Value 0 -Type DWord
+        }
+        else {
+            Write-MyVerbose 'Enabling TLS 1.1'
+            New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols" -Name "TLS 1.1" -ErrorAction SilentlyContinue
+            New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1" -Name "Client" -ErrorAction SilentlyContinue
+            New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1" -Name "Server" -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Client" -Name "DisabledByDefault" -Value 0 -Type DWord
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Client" -Name "Enabled" -Value 1 -Type DWord
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Server" -Name "DisabledByDefault" -Value 0 -Type DWord
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Server" -Name "Enabled" -Value 1 -Type DWord
+        }
+
     }
 
     function Disable-CredentialGuard {
@@ -2000,28 +2066,6 @@ process {
             New-Item -Path (Split-Path $DeviceGuardKey -Parent) -Name (Split-Path $DeviceGuardKey -Leaf) -Force -ErrorAction SilentlyContinue | Out-Null
         }
         New-ItemProperty -Path $DeviceGuardKey -Name 'EnableVirtualizationBasedSecurity' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue | Out-Null
-    }
-
-    function Disable-TLS10 {
-        Write-MyVerbose 'Disabling TLS 1.0'
-        New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols" -Name "TLS 1.0" -ErrorAction SilentlyContinue
-        New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0" -Name "Client" -ErrorAction SilentlyContinue
-        New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0" -Name "Server" -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client" -Name "DisabledByDefault" -Value 1 -Type DWord
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client" -Name "Enabled" -Value 0 -Type DWord
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server" -Name "DisabledByDefault" -Value 1 -Type DWord
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server" -Name "Enabled" -Value 0 -Type DWord
-    }
-
-    function Disable-TLS11 {
-        Write-MyVerbose 'Disabling TLS 1.1'
-        New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols" -Name "TLS 1.1" -ErrorAction SilentlyContinue
-        New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1" -Name "Client" -ErrorAction SilentlyContinue
-        New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1" -Name "Server" -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Client" -Name "DisabledByDefault" -Value 1 -Type DWord
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Client" -Name "Enabled" -Value 0 -Type DWord
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Server" -Name "DisabledByDefault" -Value 1 -Type DWord
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Server" -Name "Enabled" -Value 0 -Type DWord
     }
 
     function Disable-InsecureRenegotiation {
@@ -2235,7 +2279,7 @@ process {
             do {
                 if (Get-WebAppPoolState -Name 'MSExchangeAutodiscoverAppPool' -ErrorAction SilentlyContinue) {
 
-                    Write-Host 'Stopping and blocking startup of MSExchangeAutodiscoverAppPool'
+                    Write-Output 'Stopping and blocking startup of MSExchangeAutodiscoverAppPool'
                     if ( (Get-WebAppPoolState -Name 'MSExchangeAutodiscoverAppPool').Value -ine 'Stopped') {
                         try {
                             Stop-WebAppPool -Name 'MSExchangeAutodiscoverAppPool' -ErrorAction Stop
@@ -2254,7 +2298,7 @@ process {
                     return $true
                 }
                 else {
-                    Write-Verbose ('MSExchangeAutodiscoverAppPool not found, waiting a bit ..')
+                    Write-Output '[VERBOSE] MSExchangeAutodiscoverAppPool not found, waiting a bit ..'
                     Start-Sleep -Seconds 10
                 }
             } while ($true)
@@ -2318,7 +2362,13 @@ process {
                     Stop-Job -Job $Job -ErrorAction SilentlyContinue
                 }
                 $JobOutput = Receive-Job -Job $Job
-                Write-MyVerbose ('Cleanup background job: {0} (ID {1}), Output {2}' -f $Job.Name, $Job.Id, $JobOutput)
+                Write-MyVerbose ('Cleanup background job: {0} (ID {1})' -f $Job.Name, $Job.Id)
+                foreach ($line in $JobOutput) {
+                    Write-MyDebug ('[Job {0}] {1}' -f $Job.Name, $line)
+                }
+                foreach ($jobError in $Job.ChildJobs[0].Error) {
+                    Write-MyWarning ('[Job {0}] Error: {1}' -f $Job.Name, $jobError.Exception.Message)
+                }
                 Remove-Job -Job $Job -Force -ErrorAction SilentlyContinue
             }
             $Global:BackgroundJobs = @()
@@ -2477,7 +2527,13 @@ process {
     Test-Preflight
 
     Write-MyVerbose "Logging to $($State["TranscriptFile"])"
-    Write-MyOutput ('Install-Exchange15 version {0}' -f $ScriptVersion)
+    Write-MyOutput ('***************************')
+    Write-MyOutput ('Starting Install-Exchange15')
+    Write-MyOutput ('***************************')
+    Write-MyOutput ('Time zone      : {0}' -f $([System.TimeZoneInfo]::Local.DisplayName))
+    Write-MyOutput ('OS version     : {0}' -f $([System.Environment]::OSVersion.VersionString))
+    Write-MyOutput ('Script version : {0}' -f $ScriptVersion)
+    Write-MyOutput ('Logged on as   : {0}' -f $([System.Security.Principal.WindowsIdentity]::GetCurrent().Name))
 
     # Get rid of the security dialog when spawning exe's etc.
     Disable-OpenFileSecurityWarning
@@ -2579,7 +2635,9 @@ process {
                 }
 
                 # URL Rewrite module
-                Install-MyPackage "{9BCA2118-F753-4A1E-BCF3-5A820729965C}" "URL Rewrite Module 2.1" "rewrite_amd64_en-US.msi" "https://download.microsoft.com/download/1/2/8/128E2E22-C1B9-44A4-BE2A-5859ED1D4592/rewrite_amd64_en-US.msi" ("/quiet", "/norestart")
+                if ( !($State['InstallEdge'])) {
+                    Install-MyPackage "{9BCA2118-F753-4A1E-BCF3-5A820729965C}" "URL Rewrite Module 2.1" "rewrite_amd64_en-US.msi" "https://download.microsoft.com/download/1/2/8/128E2E22-C1B9-44A4-BE2A-5859ED1D4592/rewrite_amd64_en-US.msi" ("/quiet", "/norestart")
+                }
 
             }
 
@@ -2659,14 +2717,8 @@ process {
                     Disable-RC4
                 }
 
-                Set-TLSSettings -TLS12 $State["EnableTLS12"] -TLS13 $State["EnableTLS13"]
+                Set-TLSSettings -EnableTLS12:$State["EnableTLS12"] -EnableTLS13:$State["EnableTLS13"] -DisableTLS10:$State["DisableTLS10"] -DisableTLS11:$State["DisableTLS11"]
 
-                if ( $State["DisableTLS10"]) {
-                    Disable-TLS10
-                }
-                if ( $State["DisableTLS11"]) {
-                    Disable-TLS11
-                }
                 if ( $State["DisableInsecureRenegotiation"]) {
                     Disable-InsecureRenegotiation
                 }

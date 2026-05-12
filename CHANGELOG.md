@@ -2,6 +2,18 @@
 
 All notable changes to Install-Exchange15 are documented here.
 
+## [4.30.3]
+- `Enable-AMSI` now checks whether its already configured to prevent error message
+- Merged `Disable-TLS10` and `Disable-TLS11` logic into `Set-TLSSettings` as `-DisableTLS10` and `-DisableTLS11` switches; standalone functions removed
+- URL Rewrite Module is no longer installed when `InstallEdge` is specified, as it is not required for Edge Transport
+- When installing Edge Transport we now also detect existing installation and switch to Upgrade mode
+
+## [4.30.2]
+- Fixed background job scriptblocks output so it can be captured and send to screen and log
+- Changed timestamp format in log output: now uses local time with millisecond precision in `[yyyy-MM-dd HH:mm:ss.ffff]` format
+- Added `Write-MyDebug` logging function for debug-level output stream
+- Added startup info block to log output: timezone, OS version, script version, and logged-on user
+
 ## [4.30.1]
 - Added PowerShell 7.x detection: script now fails immediately with a clear error if run under PowerShell 7 or later, as Exchange Server does not support PowerShell 7
 - Added checks to make sure we can disable/enable AutodiscoverAppPool during Mailbox server setup
