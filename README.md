@@ -66,18 +66,22 @@ Point `-InstallPath` at a central UNC share to share prerequisites and downloads
 
 **Basic AutoPilot install with a new Exchange organization (using splatting):**
 ```powershell
-$Cred = Get-Credential
+$Cred=Get-Credential
+
+$DB= 'MDB{0}' -f ($env:COMPUTERNAME[-1])
 
 $Params = @{
     Organization                   = 'Fabrikam'
-    SourcePath                     = '\\server\share\ExchangeServer2019-x64-CU15'
+    SourcePath                     = 'C:\Install\ExchangeServerSE-x64.iso'
     InstallPath                    = 'C:\Install'
+    TargetPath                     = 'C:\Program Files\Microsoft\Exchange Server\V15'
     Credentials                    = $Cred
-    MDBName                        = 'MDB1'
-    MDBDBPath                      = 'C:\MailboxData\MDB1\DB'
-    MDBLogPath                     = 'C:\MailboxData\MDB1\Log'
-    SCP                            = 'https://autodiscover.fabrikam.com/autodiscover/autodiscover.xml'
     AutoPilot                      = $true
+    MDBName                        = $DB
+    MDBDBPath                      = 'C:\ExchangeDatabases\{0}\DB' -f $DB
+    MDBLogPath                     = 'C:\ExchangeDatabases\{0}\Log' -f $DB
+    SCP                            = 'https://autodiscover.fabrikam.com.com/autodiscover/autodiscover.xml'
+    IncludeFixes                   = $true
     DisableSSL3                    = $true
     DisableRC4                     = $true
     DisableTLS10                   = $true
@@ -85,14 +89,17 @@ $Params = @{
     DisableInsecureRenegotiation   = $true
     DisableWeakCiphers             = $true
     DisableWeakHashAlgorithms      = $true
-    DisableNonForwardSecretKeyExchange = $true
     EnableTLS12                    = $true
+    EnableTLS13                    = $false
     EnableECC                      = $true
     EnableAMSI                     = $true
+    DisableNonForwardSecretKeyExchange = $true
+    DiagnosticData                 = $true
+    DisableCredentialGuard         = $true
     Verbose                        = $true
 }
 
-.\Install-Exchange15.ps1 @Params
+& .\Install-Exchange15.ps1 @Params
 ```
 
 **Install from ISO with an additional mailbox database:**

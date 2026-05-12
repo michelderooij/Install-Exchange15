@@ -426,7 +426,19 @@ process {
 
     function Save-State( $State) {
         Write-MyVerbose "Saving state information to $StateFile"
-        $State | ConvertTo-Json -Depth 5 | Set-Content -Path $StateFile -Encoding UTF8
+        $Serializable = @{}
+        $State.GetEnumerator() | ForEach-Object {
+            if ($_.Value -is [System.Management.Automation.SwitchParameter]) {
+                $Serializable[$_.Name] = $_.Value.IsPresent
+            }
+            elseif ($_.Value -is [System.Security.SecureString]) {
+                $Serializable[$_.Name] = $_.Value | ConvertFrom-SecureString
+            }
+            else {
+                $Serializable[$_.Name] = $_.Value
+            }
+        }
+        $Serializable | ConvertTo-Json -Depth 5 | Set-Content -Path $StateFile -Encoding UTF8
     }
 
     function Restore-State() {
@@ -434,7 +446,18 @@ process {
         if (Test-Path $StateFile) {
             $json = Get-Content -Path $StateFile -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json -ErrorAction SilentlyContinue
             if ($json) {
-                $json.PSObject.Properties | ForEach-Object { $State[$_.Name] = $_.Value }
+                $json.PSObject.Properties | ForEach-Object {
+                    $value = $_.Value
+                    # Normalize legacy SwitchParameter objects saved as {"IsPresent": true/false}
+                    if ($value -is [PSCustomObject] -and $value.PSObject.Properties.Name -contains 'IsPresent') {
+                        $value = [bool]$value.IsPresent
+                    }
+                    # Restore SecureString values (keys ending in 'Password')
+                    elseif ($_.Name -like '*Password' -and $value -is [string] -and $value.Length -gt 0) {
+                        $value = ConvertTo-SecureString $value
+                    }
+                    $State[$_.Name] = $value
+                }
             }
             Write-Verbose "State information loaded from $StateFile"
         }
@@ -670,7 +693,7 @@ process {
     }
 
     function Test-Credentials {
-        $SecurePassword = ConvertTo-SecureString $State['AdminPassword']
+        $SecurePassword = $State['AdminPassword']
         $FullPlainTextAccount = Get-FullDomainAccount
         try {
             if ( $State['InstallEdge']) {
@@ -702,11 +725,12 @@ process {
 
     function Enable-AutoLogon {
         Write-MyVerbose 'Enabling Automatic Logon'
-        $PlainTextPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR( (ConvertTo-SecureString $State['AdminPassword']) ))
+        $PlainTextPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR( $State['AdminPassword'] ))
         $PlainTextAccount = $State['AdminAccount']
-        New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name AutoAdminLogon -Value 1 -ErrorAction SilentlyContinue | Out-Null
-        New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name DefaultUserName -Value $PlainTextAccount -ErrorAction SilentlyContinue | Out-Null
-        New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name DefaultPassword -Value $PlainTextPassword -ErrorAction SilentlyContinue | Out-Null
+        $WinlogonKey = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+        Set-ItemProperty -Path $WinlogonKey -Name AutoAdminLogon -Value 1 -Force | Out-Null
+        Set-ItemProperty -Path $WinlogonKey -Name DefaultUserName -Value $PlainTextAccount -Force | Out-Null
+        Set-ItemProperty -Path $WinlogonKey -Name DefaultPassword -Value $PlainTextPassword -Force | Out-Null
     }
 
     function Disable-AutoLogon {
@@ -1403,7 +1427,7 @@ process {
                 try {
                     $Script:Credentials = Get-Credential -UserName ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -Message 'Enter credentials to use'
                     $State['AdminAccount'] = $Credentials.UserName
-                    $State['AdminPassword'] = ($Credentials.Password | ConvertFrom-SecureString)
+                    $State['AdminPassword'] = $Credentials.Password
                 }
                 catch {
                     Write-MyError 'AutoPilot specified but no or improper credentials provided'
@@ -2301,7 +2325,7 @@ process {
     $FullOSVersion = ('{0}.{1}' -f $MajorOSVersion, $MinorOSVersion)
 
     if ($PSVersionTable.PSVersion.Major -ge 7) {
-        Write-Error "PowerShell 7.x is not supported. Exchange Server requires Windows PowerShell 5.1. Current version: $($PSVersionTable.PSVersion)"
+        Write-Error ('Exchange Server with PowerShell 7.x is not supported - you are using PowerShell {0}' -f $PSVersionTable.PSVersion)
         exit $ERR_UNSUPPORTEDPSVERSION
     }
 
@@ -2339,7 +2363,7 @@ process {
         $State["InstallPhase"] = 0
         $State["OrganizationName"] = $Organization
         $State["AdminAccount"] = $Credentials.UserName
-        $State["AdminPassword"] = ($Credentials.Password | ConvertFrom-SecureString -ErrorAction SilentlyContinue)
+        $State["AdminPassword"] = $Credentials.Password
         if ( Get-DiskImage -ImagePath $SourcePath -ErrorAction SilentlyContinue) {
             $State['SourceImage'] = $SourcePath
             $State["SourcePath"] = Resolve-SourcePath -SourceImage $SourcePath
@@ -2585,7 +2609,7 @@ process {
                         Write-MyOutput "Starting background job to watch for and disable MSExchangeAutodiscoverAppPool"
                         Start-DisableMSExchangeAutodiscoverAppPoolJob
                     }
-                    Else {
+                    else {
                         Write-MyWarning "IIS PSDrive not available, skipping background job to disable MSExchangeAutodiscoverAppPool"
                     }
                 }
@@ -2703,7 +2727,7 @@ process {
                         Write-MyOutput "Enabling MSExchangeAutodiscoverAppPool"
                         Enable-MSExchangeAutodiscoverAppPool
                     }
-                    Else {
+                    else {
                         Write-MyWarning "IIS PSDrive not available, skip (re-)enabling MSExchangeAutodiscoverAppPool"
                     }
                 }
