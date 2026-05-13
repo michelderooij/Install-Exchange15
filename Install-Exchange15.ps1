@@ -2737,7 +2737,7 @@ process {
 
                 Import-ExchangeModule
 
-                If( !$State["InstallEdge"]) {}
+                If( !$State["InstallEdge"]) {
     
                     if ( $State["EnableECC"]) {
                         Enable-ECC
@@ -2750,7 +2750,7 @@ process {
                     if ( $State["EnableAMSI"]) {
                         Enable-AMSI
                     }
-                    }
+                }
 
                 if ( $State["InstallMailbox"] ) {
                     # Insert your own Mailbox Server code here
