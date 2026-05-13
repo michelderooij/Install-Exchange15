@@ -2737,15 +2737,20 @@ process {
 
                 Import-ExchangeModule
 
-                if ( $State["EnableECC"]) {
-                    Enable-ECC
-                }
-                if ( $State["EnableCBC"]) {
-                    Enable-CBC
-                }
-                if ( $State["EnableAMSI"]) {
-                    Enable-AMSI
-                }
+                If( !$State["InstallEdge"]) {}
+    
+                    if ( $State["EnableECC"]) {
+                        Enable-ECC
+                    }
+                
+                    if ( $State["EnableCBC"]) {
+                        Enable-CBC
+                    }
+
+                    if ( $State["EnableAMSI"]) {
+                        Enable-AMSI
+                    }
+                    }
 
                 if ( $State["InstallMailbox"] ) {
                     # Insert your own Mailbox Server code here

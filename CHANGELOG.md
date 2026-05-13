@@ -4,6 +4,7 @@ All notable changes to Install-Exchange15 are documented here.
 
 ## [4.30.3]
 - `Enable-AMSI` now checks whether its already configured to prevent error message
+- Fixed skipping `Enable-AMSI`, `Enable-CBC` and `Enable-ECC` for Edge Transport
 - Merged `Disable-TLS10` and `Disable-TLS11` logic into `Set-TLSSettings` as `-DisableTLS10` and `-DisableTLS11` switches; standalone functions removed
 - URL Rewrite Module is no longer installed when `InstallEdge` is specified, as it is not required for Edge Transport
 - When installing Edge Transport we now also detect existing installation and switch to Upgrade mode
