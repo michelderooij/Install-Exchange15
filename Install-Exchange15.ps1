@@ -2277,7 +2277,13 @@ process {
             }
 
             do {
-                if (Get-WebAppPoolState -Name 'MSExchangeAutodiscoverAppPool' -ErrorAction SilentlyContinue) {
+                try {
+                    $AppPoolState = Get-WebAppPoolState -Name 'MSExchangeAutodiscoverAppPool' -ErrorAction Stop
+                }
+                catch {
+                    $AppPoolState = $null
+                }
+                if ($AppPoolState) {
 
                     Write-Output 'Stopping and blocking startup of MSExchangeAutodiscoverAppPool'
                     if ( (Get-WebAppPoolState -Name 'MSExchangeAutodiscoverAppPool').Value -ine 'Stopped') {
